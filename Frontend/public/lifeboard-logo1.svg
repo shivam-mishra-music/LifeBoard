@@ -1,0 +1,39 @@
+<svg width="150" height="150" viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg">
+
+  <!-- Soft theme-matching glow -->
+  <defs>
+    <filter id="softGlow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="10" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <!-- Indigo gradient (matches LifeBoard theme) -->
+    <linearGradient id="boardGrad" x1="0" y1="0" x2="200" y2="200">
+      <stop offset="0%" stop-color="#4F46E5"/>   <!-- Indigo-600 -->
+      <stop offset="100%" stop-color="#6366F1"/> <!-- Indigo-500 -->
+    </linearGradient>
+  </defs>
+
+  <!-- Rounded square -->
+  <rect
+    x="28"
+    y="28"
+    width="144"
+    height="144"
+    rx="32"
+    fill="#0F172A"
+    stroke="url(#boardGrad)"
+    stroke-width="3.5"
+    filter="url(#softGlow)"
+  />
+
+  <!-- Plus symbol -->
+  <g fill="url(#boardGrad)">
+    <rect x="95" y="60" width="10" height="80" rx="5"/>
+    <rect x="60" y="95" width="80" height="10" rx="5"/>
+  </g>
+
+</svg>
