@@ -11,36 +11,27 @@ export default function TasksPage() {
   const [creating, setCreating] = useState(false);
   const [msg, setMsg] = useState("");
   const [error, setError] = useState("");
+
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+  const [priority, setPriority] = useState("MEDIUM");
+  const [dueDate, setDueDate] = useState("");
 
-  // --- Helper: get base URL from env
   const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
-  // --- Check auth + load tasks on mount
+  /* ---------------- LOAD TASKS ---------------- */
   useEffect(() => {
     const token = localStorage.getItem("lifeboard_token");
-    if (!token) {
-      router.push("/login");
-      return;
-    }
+    if (!token) return router.push("/login");
 
     const fetchTasks = async () => {
       try {
-        setLoadingList(true);
-        setError("");
         const res = await axios.get(`${API_URL}/api/tasks`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
+          headers: { Authorization: `Bearer ${token}` },
         });
         setTasks(res.data || []);
-      } catch (err) {
-        console.error("Error fetching tasks:", err);
-        setError(
-          err.response?.data?.message ||
-            "Could not load tasks. Please try again."
-        );
+      } catch {
+        setError("Could not load tasks.");
       } finally {
         setLoadingList(false);
       }
@@ -49,67 +40,44 @@ export default function TasksPage() {
     fetchTasks();
   }, [API_URL, router]);
 
-  // --- Add new task
+  /* ---------------- CREATE TASK ---------------- */
   const handleAddTask = async (e) => {
     e.preventDefault();
     setMsg("");
     setError("");
 
-    const trimmedTitle = title.trim();
-    const trimmedDesc = description.trim();
-
-    if (!trimmedTitle) {
-      setError("Task title is required.");
-      return;
-    }
-
+    if (!title.trim()) return setError("Task title is required.");
     const token = localStorage.getItem("lifeboard_token");
-    if (!token) {
-      router.push("/login");
-      return;
-    }
 
     try {
       setCreating(true);
+
       const res = await axios.post(
         `${API_URL}/api/tasks`,
-        {
-          title: trimmedTitle,
-          description: trimmedDesc || undefined,
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
+        { title, description, priority, dueDate },
+        { headers: { Authorization: `Bearer ${token}` } }
       );
 
-      const newTask = res.data.task;
-      setTasks((prev) => [newTask, ...prev]);
+      setTasks((prev) => [res.data.task, ...prev]);
       setTitle("");
       setDescription("");
+      setDueDate("");
+      setPriority("MEDIUM");
+
       setMsg("Task added!");
-      setTimeout(() => setMsg(""), 1800);
-    } catch (err) {
-      console.error("Error creating task:", err);
-      setError(
-        err.response?.data?.message || "Could not create task. Please retry."
-      );
+      setTimeout(() => setMsg(""), 1500);
+    } catch {
+      setError("Could not create task.");
     } finally {
       setCreating(false);
     }
   };
 
-  // --- Toggle completed
+  /* ---------------- UPDATE COMPLETED ---------------- */
   const handleToggleCompleted = async (task) => {
     const token = localStorage.getItem("lifeboard_token");
-    if (!token) {
-      router.push("/login");
-      return;
-    }
-
     const optimistic = !task.completed;
-    // optimistic update
+
     setTasks((prev) =>
       prev.map((t) => (t.id === task.id ? { ...t, completed: optimistic } : t))
     );
@@ -120,271 +88,281 @@ export default function TasksPage() {
         { completed: optimistic },
         { headers: { Authorization: `Bearer ${token}` } }
       );
-    } catch (err) {
-      console.error("Error updating task:", err);
-      // revert
+    } catch {
       setTasks((prev) =>
-        prev.map((t) =>
-          t.id === task.id ? { ...t, completed: task.completed } : t
-        )
+        prev.map((t) => (t.id === task.id ? { ...t, completed: task.completed } : t))
       );
-      setError("Could not update task. Please try again.");
     }
   };
 
-  // --- Delete task
-  const handleDeleteTask = async (taskId) => {
+  /* ---------------- DELETE TASK ---------------- */
+  const handleDeleteTask = async (id) => {
     const token = localStorage.getItem("lifeboard_token");
-    if (!token) {
-      router.push("/login");
-      return;
-    }
+    const snapshot = tasks;
 
-    const previous = tasks;
-    // optimistic remove
-    setTasks((prev) => prev.filter((t) => t.id !== taskId));
+    setTasks(tasks.filter((t) => t.id !== id));
 
     try {
-      await axios.delete(`${API_URL}/api/tasks/${taskId}`, {
+      await axios.delete(`${API_URL}/api/tasks/${id}`, {
         headers: { Authorization: `Bearer ${token}` },
       });
-    } catch (err) {
-      console.error("Error deleting task:", err);
-      setTasks(previous); // revert
-      setError("Could not delete task. Please try again.");
+    } catch {
+      setTasks(snapshot);
     }
+  };
+
+  /* ---------------- UTILITIES ---------------- */
+  const priorityBadge = (p) => {
+    const map = {
+      HIGH: "🔥 High",
+      MEDIUM: "⚡ Medium",
+      LOW: "🌿 Low",
+    };
+
+    const styles = {
+      HIGH: "bg-red-500/20 border-red-400/40 text-red-300",
+      MEDIUM: "bg-yellow-500/20 border-yellow-400/40 text-yellow-300",
+      LOW: "bg-green-500/20 border-green-400/40 text-green-300",
+    };
+
+    return (
+      <span className={`px-2 py-0.5 text-[10px] rounded-md border ${styles[p]}`}>
+        {map[p]}
+      </span>
+    );
+  };
+
+  const priorityDot = (p) => {
+    const dot = {
+      HIGH: "bg-red-400",
+      MEDIUM: "bg-yellow-300",
+      LOW: "bg-green-400",
+    };
+    return <span className={`h-2 w-2 rounded-full ${dot[p]}`}></span>;
+  };
+
+  const isOverdue = (date) => {
+    if (!date) return false;
+    return new Date(date) < new Date();
   };
 
   const pendingTasks = tasks.filter((t) => !t.completed);
   const completedTasks = tasks.filter((t) => t.completed);
 
   return (
-    <div className="relative z-10 animate-fadeIn space-y-5 sm:space-y-6">
-      {/* Header */}
+    <div className="relative z-10 animate-fadeIn space-y-6">
+      {/* --------- HEADER --------- */}
       <header>
         <p className="text-xs uppercase tracking-[0.18em] text-indigo-300/80 mb-1">
           Tasks
         </p>
-        <h1 className="text-2xl sm:text-3xl font-semibold text-white">
-          Your tasks, in one place
-        </h1>
+        <h1 className="text-3xl font-semibold text-white">Your tasks, in one place</h1>
         <p className="text-sm text-slate-400 mt-1">
-          Capture ideas, todos and reminders that keep LifeBoard moving.
+          Capture todos, reminders, and ideas.
         </p>
       </header>
 
-      {/* Messages */}
+      {/* --------- ALERTS --------- */}
       {(msg || error) && (
-        <div className="text-sm">
+        <div className="space-y-2 text-sm">
           {msg && (
-            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-400/40 text-emerald-200 mr-2">
-              <span className="text-xs">✅</span>
-              <span>{msg}</span>
+            <div className="px-3 py-2 rounded-lg bg-emerald-500/10 border border-emerald-400/40 text-emerald-200 flex gap-2">
+              <span>✅</span> {msg}
             </div>
           )}
           {error && (
-            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-rose-500/10 border border-rose-400/40 text-rose-200">
-              <span className="text-xs">⚠️</span>
-              <span>{error}</span>
+            <div className="px-3 py-2 rounded-lg bg-rose-500/10 border border-rose-400/40 text-rose-200 flex gap-2">
+              <span>⚠️</span> {error}
             </div>
           )}
         </div>
       )}
 
-      {/* Add Task Card */}
-      <section className="bg-white/5 border border-white/10 rounded-2xl p-5 sm:p-6 backdrop-blur-xl shadow-xl shadow-black/40">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-sm font-semibold text-slate-100">
-            Add a new task
-          </h2>
-          <span className="text-[11px] px-2 py-1 rounded-full bg-indigo-500/10 border border-indigo-400/40 text-indigo-200">
-            Quick capture
-          </span>
-        </div>
+      {/* --------- ADD TASK CARD --------- */}
+      <section className="bg-white/5 border border-white/10 rounded-2xl p-5 backdrop-blur-xl shadow-xl shadow-black/40">
 
-        <form
-          onSubmit={handleAddTask}
-          className="space-y-3 sm:space-y-0 sm:flex sm:items-center sm:gap-3"
-        >
-          <div className="flex-1 space-y-2">
-            <input
-              type="text"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              className="w-full px-4 py-2.5 rounded-lg bg-white/5 border border-white/15 text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/60 transition text-sm"
-              placeholder="Task title — e.g. 'Draft verse for Hum Tumhare'"
-            />
-            <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              rows={2}
-              className="w-full px-4 py-2.5 rounded-lg bg-white/5 border border-white/10 text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/40 transition text-xs sm:text-sm resize-none"
-              placeholder="Optional notes — links, ideas, time, etc."
-            />
+        <form onSubmit={handleAddTask} className="space-y-3">
+
+          <input
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="Task title"
+            className="w-full px-4 py-2.5 bg-white/5 border border-white/15 rounded-lg 
+                       text-slate-100 text-sm placeholder:text-slate-500 
+                       focus:ring-2 focus:ring-indigo-500/40 transition"
+          />
+
+          <textarea
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder="Optional notes…"
+            rows={2}
+            className="w-full px-4 py-2.5 bg-white/5 border border-white/10 rounded-lg 
+                       text-slate-100 text-sm placeholder:text-slate-500 
+                       focus:ring-2 focus:ring-indigo-500/40 transition resize-none"
+          />
+
+          {/* PRIORITY + DATE + BUTTON ROW */}
+          <div className="flex flex-col sm:flex-row items-center gap-3">
+
+            {/* PRIORITY DROPDOWN */}
+            <div className="flex-1 relative">
+              <select
+                value={priority}
+                onChange={(e) => setPriority(e.target.value)}
+                className="w-full px-4 py-2.5 text-sm bg-white/5 border border-white/10 
+                           rounded-lg text-slate-100 focus:ring-2 focus:ring-indigo-500/40 transition appearance-none"
+              >
+                <option value="LOW">🌿 Low Priority</option>
+                <option value="MEDIUM">⚡ Medium Priority</option>
+                <option value="HIGH">🔥 High Priority</option>
+              </select>
+
+              <span className="absolute right-3 top-2.5 text-slate-300 text-xs pointer-events-none">
+                ▼
+              </span>
+            </div>
+
+            {/* DATE INPUT */}
+            <div className="flex-1 relative">
+              <input
+                type="date"
+                value={dueDate}
+                onChange={(e) => setDueDate(e.target.value)}
+                className={`w-full px-4 py-2.5 pr-10 text-sm bg-white/5 border rounded-lg text-slate-100 
+                            focus:ring-2 transition 
+                            ${
+                              isOverdue(dueDate)
+                                ? "border-red-400 ring-red-500/40 animate-pulse"
+                                : "border-white/10 focus:ring-indigo-500/40"
+                            }`}
+              />
+              <span className="absolute right-3 top-2.5 text-slate-400 text-sm pointer-events-none">
+                📅
+              </span>
+            </div>
+
+            {/* ADD BUTTON */}
+            <button
+              disabled={creating}
+              className="px-5 py-2.5 whitespace-nowrap rounded-xl bg-indigo-600 hover:bg-indigo-500 
+                         disabled:opacity-60 text-white text-sm font-semibold shadow-lg 
+                         shadow-indigo-500/30 transition flex items-center gap-2"
+            >
+              {creating ? (
+                <>
+                  <span className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                <>＋ Add</>
+              )}
+            </button>
+
           </div>
-
-          <button
-            type="submit"
-            disabled={creating}
-            className="mt-3 sm:mt-0 shrink-0 inline-flex items-center justify-center px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-60 text-white text-sm font-semibold shadow-lg shadow-indigo-500/40 transition-all"
-          >
-            {creating ? (
-              <>
-                <span className="inline-block h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
-                Saving...
-              </>
-            ) : (
-              <>
-                <span className="mr-1.5 text-base">＋</span>
-                Add task
-              </>
-            )}
-          </button>
         </form>
       </section>
 
-      {/* Tasks List */}
-      <section className="grid gap-4 sm:gap-6 md:grid-cols-2">
-        {/* Pending */}
-        <div className="bg-white/5 border border-white/10 rounded-2xl p-5 sm:p-6 backdrop-blur-xl">
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-semibold text-slate-100">
-              Pending tasks
-            </h2>
-            <span className="text-[11px] text-slate-400">
-              {pendingTasks.length} active
-            </span>
-          </div>
+      {/* --------- TASK LISTS --------- */}
+      <section className="grid md:grid-cols-2 gap-6">
 
-          {loadingList ? (
-            <p className="text-xs text-slate-400">Loading your tasks...</p>
-          ) : pendingTasks.length === 0 ? (
-            <p className="text-xs text-slate-500 italic">
-              No pending tasks. Nice. ✨
-            </p>
-          ) : (
-            <ul className="space-y-2.5 text-sm">
-              {pendingTasks.map((task) => (
-                <li
-                  key={task.id}
-                  className="group flex items-start gap-3 px-3 py-2.5 rounded-xl bg-white/5 border border-white/10 hover:bg-white/8 transition"
-                >
-                  {/* Checkbox */}
-                  <button
-                    type="button"
-                    onClick={() => handleToggleCompleted(task)}
-                    className="mt-0.5 inline-flex h-5 w-5 items-center justify-center rounded-md border border-indigo-400/70 bg-black/20 hover:bg-indigo-500/40 transition"
-                  >
-                    <span className="text-[10px] text-indigo-100">✓</span>
-                  </button>
+        {/* PENDING */}
+        <div className="bg-white/5 border border-white/10 rounded-2xl p-5">
+          <h2 className="text-sm font-semibold text-slate-100 mb-2">
+            Pending tasks ({pendingTasks.length})
+          </h2>
 
-                  <div className="flex-1 min-w-0">
-                    <p className="text-slate-100 font-medium truncate">
-                      {task.title}
-                    </p>
-                    {task.description && (
-                      <p className="text-xs text-slate-400 line-clamp-2">
-                        {task.description}
-                      </p>
-                    )}
-                    <p className="mt-1 text-[10px] text-slate-500">
-                      Created at{" "}
-                      {task.createdAt
-                        ? new Date(task.createdAt).toLocaleString()
-                        : "—"}
-                    </p>
-                  </div>
-
-                  {/* Delete */}
-                  <button
-                    type="button"
-                    onClick={() => handleDeleteTask(task.id)}
-                    className="opacity-0 group-hover:opacity-100 text-[11px] text-slate-500 hover:text-rose-300 transition ml-1"
-                    title="Delete task"
-                  >
-                    ✕
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
+          {pendingTasks.map((t) => (
+            <TaskItem
+              key={t.id}
+              task={t}
+              onToggle={handleToggleCompleted}
+              onDelete={handleDeleteTask}
+              priorityBadge={priorityBadge}
+              priorityDot={priorityDot}
+              isOverdue={isOverdue}
+            />
+          ))}
         </div>
 
-        {/* Completed */}
-        <div className="bg-white/5 border border-white/10 rounded-2xl p-5 sm:p-6 backdrop-blur-xl">
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-semibold text-slate-100">
-              Completed
-            </h2>
-            <span className="text-[11px] text-slate-400">
-              {completedTasks.length} done
-            </span>
-          </div>
+        {/* COMPLETED */}
+        <div className="bg-white/5 border border-white/10 rounded-2xl p-5">
+          <h2 className="text-sm font-semibold text-slate-100 mb-2">
+            Completed ({completedTasks.length})
+          </h2>
 
-          {loadingList ? (
-            <p className="text-xs text-slate-400">Loading your tasks...</p>
-          ) : completedTasks.length === 0 ? (
-            <p className="text-xs text-slate-500 italic">
-              Tasks you finish will move here.
-            </p>
-          ) : (
-            <ul className="space-y-2.5 text-sm">
-              {completedTasks.map((task) => (
-                <li
-                  key={task.id}
-                  className="group flex items-start gap-3 px-3 py-2.5 rounded-xl bg-emerald-500/8 border border-emerald-400/25 hover:bg-emerald-500/12 transition"
-                >
-                  {/* Checkbox */}
-                  <button
-                    type="button"
-                    onClick={() => handleToggleCompleted(task)}
-                    className="mt-0.5 inline-flex h-5 w-5 items-center justify-center rounded-md border border-emerald-400 bg-emerald-500/50"
-                  >
-                    <span className="text-[10px] text-emerald-50">✓</span>
-                  </button>
-
-                  <div className="flex-1 min-w-0">
-                    <p className="text-slate-100 font-medium line-through decoration-emerald-400/70 truncate">
-                      {task.title}
-                    </p>
-                    {task.description && (
-                      <p className="text-xs text-emerald-100/80 line-clamp-2 line-through decoration-emerald-300/60">
-                        {task.description}
-                      </p>
-                    )}
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() => handleDeleteTask(task.id)}
-                    className="opacity-0 group-hover:opacity-100 text-[11px] text-emerald-100/80 hover:text-rose-200 transition ml-1"
-                    title="Delete task"
-                  >
-                    ✕
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
+          {completedTasks.map((t) => (
+            <TaskItem
+              key={t.id}
+              task={t}
+              completed
+              onToggle={handleToggleCompleted}
+              onDelete={handleDeleteTask}
+              priorityBadge={priorityBadge}
+              priorityDot={priorityDot}
+              isOverdue={isOverdue}
+            />
+          ))}
         </div>
       </section>
+    </div>
+  );
+}
 
-      {/* Tiny animations helper (reuse) */}
-      <style jsx>{`
-        .animate-fadeIn {
-          animation: fadeIn 0.6s ease-out forwards;
-        }
-        @keyframes fadeIn {
-          from {
-            opacity: 0;
-            transform: translateY(4px);
-          }
-          to {
-            opacity: 1;
-            transform: translateY(0);
-          }
-        }
-      `}</style>
+/* ---------------- TASK ITEM COMPONENT ---------------- */
+function TaskItem({ task, completed, onToggle, onDelete, priorityBadge, priorityDot, isOverdue }) {
+  return (
+    <div
+      className={`group flex items-start gap-3 px-3 py-3 rounded-xl mb-2 border transition ${
+        completed
+          ? "bg-emerald-500/10 border-emerald-400/20"
+          : "bg-white/5 border-white/10 hover:bg-white/10"
+      }`}
+    >
+      {/* Checkbox */}
+      <button
+        onClick={() => onToggle(task)}
+        className="h-5 w-5 flex items-center justify-center rounded-md border border-indigo-400 bg-black/30 hover:bg-indigo-500/40 transition"
+      >
+        <span className="text-[10px] text-indigo-100">✓</span>
+      </button>
+
+      {/* Content */}
+      <div className="flex-1">
+        <div className="flex items-center justify-between">
+          <p className={`font-medium truncate ${completed ? "line-through text-slate-400" : "text-white"}`}>
+            {task.title}
+          </p>
+
+          {/* Priority badge */}
+          {priorityBadge(task.priority)}
+        </div>
+
+        {task.description && (
+          <p className="text-xs text-slate-400 line-clamp-2">{task.description}</p>
+        )}
+
+        {/* Due Date */}
+        {task.dueDate && (
+          <p
+            className={`mt-1 text-[11px] ${
+              isOverdue(task.dueDate)
+                ? "text-red-400 font-medium animate-pulse"
+                : "text-blue-300"
+            }`}
+          >
+            Due: {new Date(task.dueDate).toLocaleDateString()}
+          </p>
+        )}
+      </div>
+
+      {/* Delete */}
+      <button
+        onClick={() => onDelete(task.id)}
+        className="opacity-0 group-hover:opacity-100 text-[12px] text-slate-400 hover:text-rose-300 transition ml-2"
+      >
+        ✕
+      </button>
     </div>
   );
 }

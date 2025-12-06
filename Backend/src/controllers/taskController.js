@@ -6,7 +6,7 @@ const prisma = new PrismaClient();
 // Create a new task
 export const createTask = async (req, res) => {
   try {
-    const { title, description } = req.body;
+    const { title, description, priority, dueDate } = req.body;
     const userId = req.user.userId; // from JWT
 
     if (!title || !title.trim()) {
@@ -17,6 +17,8 @@ export const createTask = async (req, res) => {
       data: {
         title: title.trim(),
         description: description?.trim() || null,
+        priority: priority ? priority.toUpperCase() : "MEDIUM",
+        dueDate: dueDate ? new Date(dueDate) : null,
         userId,
       },
     });
@@ -50,15 +52,16 @@ export const updateTask = async (req, res) => {
   try {
     const userId = req.user.userId;
     const id = Number(req.params.id);
-    const { title, description, completed } = req.body;
+    const { title, description, completed, priority, dueDate } = req.body;
 
-    // Only allow update if this task belongs to this user
     const updated = await prisma.task.updateMany({
       where: { id, userId },
       data: {
         ...(title !== undefined ? { title } : {}),
         ...(description !== undefined ? { description } : {}),
         ...(completed !== undefined ? { completed } : {}),
+        ...(priority !== undefined ? { priority: priority.toUpperCase() } : {}),
+        ...(dueDate !== undefined ? { dueDate: dueDate ? new Date(dueDate) : null } : {}),
       },
     });
 
@@ -82,7 +85,6 @@ export const deleteTask = async (req, res) => {
     const userId = req.user.userId;
     const id = Number(req.params.id);
 
-    // ensure ownership first
     const deleted = await prisma.task.deleteMany({
       where: { id, userId },
     });
