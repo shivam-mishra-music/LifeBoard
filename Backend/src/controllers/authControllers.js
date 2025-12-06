@@ -31,7 +31,7 @@ async function signup(req, res) {
     });
   } catch (err) {
     console.error("Signup Error:", err);
-    res.status(500).json({ message: "Server error" });
+    res.status(500).json({ message: `Server error - ${err.message}` });
   }
 }
 
