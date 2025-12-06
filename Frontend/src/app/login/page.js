@@ -21,7 +21,7 @@ export default function Login() {
 
     try {
       const res = await axios.post(
-        "http://localhost:8000/api/auth/login",
+        `${process.env.NEXT_PUBLIC_API_URL}/api/auth/login`,
         form
       );
 

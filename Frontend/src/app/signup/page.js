@@ -28,7 +28,7 @@ export default function Signup() {
   setMsg("");
 
   try {
-    const res = await axios.post("http://localhost:8000/api/auth/signup", form);
+    const res = await axios.post(`${process.env.NEXT_PUBLIC_API_URL}/api/auth/signup`, form);
 
     setMsg("Account created successfully! Redirecting…");
 
