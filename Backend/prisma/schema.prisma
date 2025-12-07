@@ -26,18 +26,19 @@ model User {
   password  String
   createdAt DateTime @default(now())
 
-  tasks  Task[]
-  notes  Note[]
+  tasks        Task[]
+  notes        Note[]
+  daySummaries DaySummary[]
 }
 
 model Task {
-  id          Int       @id @default(autoincrement())
+  id          Int      @id @default(autoincrement())
   title       String
   description String?
-  completed   Boolean   @default(false)
-  createdAt   DateTime  @default(now())
+  completed   Boolean  @default(false)
+  createdAt   DateTime @default(now())
 
-  priority Priority @default(MEDIUM)
+  priority Priority  @default(MEDIUM)
   dueDate  DateTime?
 
   user   User @relation(fields: [userId], references: [id])
@@ -48,9 +49,9 @@ model Note {
   id        Int      @id @default(autoincrement())
   title     String
   content   String
-  color     String?          // keep this ✔
-  pinned    Boolean @default(false)  // keep this ✔
-  category  String?          // ⭐ NEW field for folders/categories
+  color     String? // keep this ✔
+  pinned    Boolean  @default(false) // keep this ✔
+  category  String? // ⭐ NEW field for folders/categories
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -58,4 +59,17 @@ model Note {
   userId Int
 }
 
+model DaySummary {
+  id           Int      @id @default(autoincrement())
+  date         DateTime
+  mood         String? // "good", "moderate", "bad"
+  productivity Int? // 1–5
+  journal      String? // Optional daily notes
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
+  user   User @relation(fields: [userId], references: [id])
+  userId Int
+
+  @@unique([userId, date])
+}
