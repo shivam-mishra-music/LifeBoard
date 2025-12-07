@@ -1,77 +1,124 @@
-import {
-  createDaySummary,
-  updateDaySummary,
-  getSummaryByDate,
-  getMonthSummaries,
-  deleteSummary
-} from "../services/daySummaryService.js";
+import prisma from "../prismaClient.js";
 
+// CREATE SUMMARY
 export async function create(req, res) {
   try {
-    const userId = req.user.id;
-    const { date, mood, productivity, journal } = req.body;
+    const userId = req.user.userId;
+    const date = new Date(req.body.date);
 
-    const summary = await createDaySummary(userId, {
-      date: new Date(date),
-      mood,
-      productivity,
-      journal
+    // Check if summary already exists
+    const existing = await prisma.daySummary.findFirst({
+      where: { userId, date }
     });
 
-    return res.status(201).json({ summary });
-  } catch (err) {
-    console.log(err);
-    return res.status(500).json({ error: "Could not create summary" });
+    if (existing) {
+      // Update ONLY journal
+      const updated = await prisma.daySummary.update({
+        where: { id: existing.id },
+        data: { journal: req.body.journal ?? existing.journal }
+      });
+      
+      return res.json({ summary: updated, updated: true });
+    }
+
+    // Create new
+    const created = await prisma.daySummary.create({
+      data: {
+        date,
+        userId,
+        mood: req.body.mood || null,
+        productivity: req.body.productivity || null,
+        journal: req.body.journal || null
+      }
+    });
+
+    return res.status(201).json({ summary: created });
+  } catch (error) {
+    console.error("Create Error:", error);
+    return res.status(500).json({ message: "Server Error", error: error.message });
   }
 }
 
+
+// UPDATE SUMMARY
 export async function update(req, res) {
   try {
-    const userId = req.user.id;
-    const { id } = req.params;
+    const id = Number(req.params.id);
 
-    const updated = await updateDaySummary(id, userId, req.body);
-    return res.json({ updated });
+    const updated = await prisma.daySummary.update({
+      where: { id },
+      data: {
+        journal: req.body.journal
+      }
+    });
+
+    return res.json({ summary: updated });
   } catch (err) {
-    return res.status(500).json({ error: "Could not update summary" });
+    console.error("Update Error:", err);
+    return res.status(500).json({ error: err.message });
   }
 }
 
+
+// GET BY DATE
 export async function getByDate(req, res) {
   try {
+    const userId = req.user.userId;
     const { date } = req.params;
-    const userId = req.user.id;
 
-    const summary = await getSummaryByDate(userId, date);
+    const summary = await prisma.daySummary.findFirst({
+      where: {
+        userId,
+        date: new Date(date),
+      },
+    });
+
     return res.json({ summary });
+
   } catch (err) {
+    console.error(err);
     return res.status(500).json({ error: "Error fetching summary" });
   }
 }
 
+// GET MONTH
 export async function getMonth(req, res) {
   try {
-    const { month } = req.query; // yyyy-mm
-    const userId = req.user.id;
+    const { month } = req.query;
+    const userId = req.user.userId;
 
     const [year, mon] = month.split("-");
-    const summaries = await getMonthSummaries(userId, year, mon);
+
+    const start = new Date(year, Number(mon) - 1, 1);
+    const end = new Date(year, Number(mon), 0);
+
+    const summaries = await prisma.daySummary.findMany({
+      where: {
+        userId,
+        date: { gte: start, lte: end },
+      },
+    });
 
     return res.json({ summaries });
+
   } catch (err) {
+    console.error(err);
     return res.status(500).json({ error: "Error loading month summaries" });
   }
 }
 
 export async function remove(req, res) {
   try {
-    const userId = req.user.id;
-    const { id } = req.params;
+    const id = Number(req.params.id);
 
-    await deleteSummary(id, userId);
+    await prisma.daySummary.delete({
+      where: { id }
+    });
 
     return res.json({ message: "Deleted" });
+
   } catch (err) {
+    console.error("Delete Error:", err);
     return res.status(500).json({ error: "Could not delete summary" });
   }
 }
