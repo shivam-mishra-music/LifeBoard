@@ -123,12 +123,7 @@ export default function CalendarPage() {
 
     setSelectedDate(date);
     setOpenModal(true);
-    setCurrentSummary(null);
-
-    // default values
-    setMood("");
-    setProductivity(3);
-    setJournal("");
+    setCurrentSummary(null); // we'll refill if exists
 
     try {
       const dateStr = format(date, "yyyy-MM-dd");
@@ -142,53 +137,68 @@ export default function CalendarPage() {
         setMood(s.mood || "");
         setProductivity(s.productivity || 3);
         setJournal(s.journal || "");
+      } else {
+        // no summary yet
+        setMood("");
+        setProductivity(3);
+        setJournal("");
       }
     } catch (err) {
       console.log("No summary yet for this date.");
+      setMood("");
+      setProductivity(3);
+      setJournal("");
     }
   };
 
   // -------- Save / update summary --------
   const saveSummary = async () => {
-    if (!authToken || !selectedDate) return;
+  if (!authToken || !selectedDate) return;
 
-    const future = isFutureDate(selectedDate);
-    const dateKey = format(selectedDate, "yyyy-MM-dd");
+  const future = isFutureDate(selectedDate);
+  const dateKey = format(selectedDate, "yyyy-MM-dd");
 
-    // For CREATE we send mood/productivity (only past/today)
-    const basePayload = {
-      date: dateKey,
-      journal: journal.trim() || null,
-    };
-    const createPayload = future
-      ? basePayload
-      : { ...basePayload, mood: mood || null, productivity };
-
-    try {
-      if (currentSummary && currentSummary.id) {
-        // Existing summary → only update journal
-        await axios.put(
-          `${API_URL}/api/day-summary/${currentSummary.id}`,
-          { journal: journal.trim() || null },
-          { headers: { Authorization: `Bearer ${authToken}` } }
-        );
-      } else {
-        // First time → create
-        await axios.post(`${API_URL}/api/day-summary`, createPayload, {
-          headers: { Authorization: `Bearer ${authToken}` },
-        });
-      }
-
-      setOpenModal(false);
-      setBanner("Saved!");
-      setTimeout(() => setBanner(""), 1500);
-      await loadMonth(); // refresh month with new data
-    } catch (err) {
-      console.error("Save error:", err);
-      setBanner("Could not save.");
-      setTimeout(() => setBanner(""), 2000);
-    }
+  const basePayload = {
+    date: dateKey,
+    journal: journal.trim() || null,
   };
+
+  const createPayload = future
+    ? basePayload
+    : { ...basePayload, mood: mood || null, productivity };
+
+  try {
+    if (currentSummary && currentSummary.id) {
+      await axios.put(
+        `${API_URL}/api/day-summary/${currentSummary.id}`,
+        { journal: journal.trim() || null },
+        { headers: { Authorization: `Bearer ${authToken}` } }
+      );
+    } else {
+      await axios.post(`${API_URL}/api/day-summary`, createPayload, {
+        headers: { Authorization: `Bearer ${authToken}` },
+      });
+    }
+
+    // 🔥 FIX — Force fetch latest data (no stale previews)
+    const monthStr = format(currentMonth, "yyyy-MM");
+    const refreshed = await axios.get(`${API_URL}/api/day-summary?month=${monthStr}`, {
+      headers: { Authorization: `Bearer ${authToken}` }
+    });
+
+    setMonthSummaries(refreshed.data.summaries || []);
+
+    setOpenModal(false);
+    setBanner("Saved!");
+    setTimeout(() => setBanner(""), 1500);
+
+  } catch (err) {
+    console.error("Save error:", err);
+    setBanner("Could not save.");
+    setTimeout(() => setBanner(""), 2000);
+  }
+};
+
 
   // -------- Prepare calendar days --------
   const monthDays = eachDayOfInterval({
@@ -197,8 +207,7 @@ export default function CalendarPage() {
   });
 
   const firstDay = monthDays[0];
-  // JS: 0=Sun..6=Sat → convert to Mon-first index
-  const weekdayIndex = (firstDay.getDay() + 6) % 7;
+  const weekdayIndex = (firstDay.getDay() + 6) % 7; // Mon-first
   const leadingBlanks = Array.from({ length: weekdayIndex });
 
   const moodColors = {
@@ -213,6 +222,8 @@ export default function CalendarPage() {
     if (m === "bad") return "😢 Bad";
     return "";
   };
+
+  const selectedTasks = selectedDate ? getTasksForDay(selectedDate) : [];
 
   return (
     <div className="relative z-10 space-y-6 text-white">
@@ -321,7 +332,7 @@ export default function CalendarPage() {
                 )}
               </p>
 
-              {/* Summary mood / productivity */}
+              {/* Summary mood / productivity / journal peek */}
               {summary && (
                 <div className="mt-1.5 text-[11px] space-y-[2px]">
                   {summary.mood && <p>{moodLabel(summary.mood)}</p>}
@@ -330,7 +341,6 @@ export default function CalendarPage() {
                       Productivity {summary.productivity}/5
                     </p>
                   )}
-                  {/* A + B: journal icon + tiny preview */}
                   {summary.journal && (
                     <p className="text-[10px] text-slate-200/90 flex items-center gap-1 truncate">
                       <span>📝</span>
@@ -376,6 +386,7 @@ export default function CalendarPage() {
           setJournal={setJournal}
           isFuture={isFutureDate(selectedDate)}
           hasSummary={!!currentSummary}
+          tasks={selectedTasks}
           onClose={() => setOpenModal(false)}
           onSave={saveSummary}
         />
@@ -396,6 +407,7 @@ function DayModal({
   setJournal,
   isFuture,
   hasSummary,
+  tasks,
   onClose,
   onSave,
 }) {
@@ -434,7 +446,38 @@ function DayModal({
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
       <div className="bg-[#0e1525] border border-white/10 rounded-2xl p-6 w-[90%] max-w-md shadow-2xl shadow-black/60">
-        <h2 className="text-xl font-semibold mb-4">{formatted}</h2>
+        <h2 className="text-xl font-semibold mb-2">{formatted}</h2>
+
+        {/* Tasks with deadline this day */}
+        {tasks && tasks.length > 0 && (
+          <div className="mb-4 text-xs">
+            <p className="text-slate-300 mb-1 flex items-center gap-1">
+              <span>🎯</span>
+              <span>Tasks with deadline this day</span>
+            </p>
+            <div className="space-y-1 max-h-24 overflow-y-auto pr-1">
+              {tasks.map((t) => (
+                <div
+                  key={t.id}
+                  className="flex items-start gap-2 text-slate-200/90"
+                >
+                  <span className="mt-[2px]">•</span>
+                  <div>
+                    <p className="font-medium text-[12px] leading-tight">
+                      {t.title}
+                    </p>
+                    {t.description && (
+                      <p className="text-[11px] text-slate-400 line-clamp-2">
+                        {t.description}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="h-px bg-white/10 mt-3" />
+          </div>
+        )}
 
         {/* Mood */}
         <p className="text-sm text-slate-300 mb-1 flex items-center justify-between">
@@ -482,7 +525,7 @@ function DayModal({
           )}
           {hasSummary && !isFuture && (
             <span className="text-[11px] text-slate-500">
-              Already logged, journal is still editable
+              Already logged, journal still editable
             </span>
           )}
         </p>
