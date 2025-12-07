@@ -66,20 +66,25 @@ export async function getByDate(req, res) {
     const userId = req.user.userId;
     const { date } = req.params;
 
+    // Normalize date to UTC midnight
+    const d = new Date(date);
+    d.setUTCHours(0, 0, 0, 0);
+
     const summary = await prisma.daySummary.findFirst({
       where: {
         userId,
-        date: new Date(date),
-      },
+        date: d
+      }
     });
 
     return res.json({ summary });
 
   } catch (err) {
-    console.error(err);
+    console.error("getByDate error:", err);
     return res.status(500).json({ error: "Error fetching summary" });
   }
 }
+
 
 // GET MONTH
 export async function getMonth(req, res) {
