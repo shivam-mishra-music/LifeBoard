@@ -17,6 +17,12 @@ export default function TasksPage() {
   const [priority, setPriority] = useState("MEDIUM");
   const [dueDate, setDueDate] = useState("");
 
+  const [filterPriority, setFilterPriority] = useState("");
+  const [filterCompleted, setFilterCompleted] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [sortBy, setSortBy] = useState("createdAt");
+  const [sortOrder, setSortOrder] = useState("desc");
+
   const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
   /* ---------------- LOAD TASKS ---------------- */
@@ -26,10 +32,15 @@ export default function TasksPage() {
 
     const fetchTasks = async () => {
       try {
-        const res = await axios.get(`${API_URL}/api/tasks`, {
+        const params = new URLSearchParams({ limit: "100", sortBy, order: sortOrder });
+        if (filterPriority) params.append("priority", filterPriority);
+        if (filterCompleted) params.append("completed", filterCompleted);
+        if (searchQuery) params.append("search", searchQuery);
+
+        const res = await axios.get(`${API_URL}/api/tasks?${params}`, {
           headers: { Authorization: `Bearer ${token}` },
         });
-        setTasks(res.data || []);
+        setTasks(res.data.tasks || res.data || []);
       } catch {
         setError("Could not load tasks.");
       } finally {
@@ -38,7 +49,7 @@ export default function TasksPage() {
     };
 
     fetchTasks();
-  }, [API_URL, router]);
+  }, [API_URL, router, filterPriority, filterCompleted, searchQuery, sortBy, sortOrder]);
 
   /* ---------------- CREATE TASK ---------------- */
   const handleAddTask = async (e) => {
@@ -146,8 +157,8 @@ export default function TasksPage() {
     return new Date(date) < new Date();
   };
 
-  const pendingTasks = tasks.filter((t) => !t.completed);
-  const completedTasks = tasks.filter((t) => t.completed);
+  const pendingTasks = filterCompleted === "true" ? [] : filterCompleted === "false" ? tasks : tasks.filter((t) => !t.completed);
+  const completedTasks = filterCompleted === "false" ? [] : filterCompleted === "true" ? tasks : tasks.filter((t) => t.completed);
 
   return (
     <div className="relative z-10 animate-fadeIn space-y-6">
@@ -177,6 +188,52 @@ export default function TasksPage() {
           )}
         </div>
       )}
+
+      {/* --------- FILTERS & SEARCH --------- */}
+      <section className="bg-white/5 border border-white/10 rounded-2xl p-4 space-y-3">
+        <input
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder="Search tasks..."
+          className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg text-slate-100 text-sm placeholder:text-slate-500 focus:ring-2 focus:ring-indigo-500/40"
+        />
+        <div className="flex flex-wrap gap-2">
+          <select
+            value={filterPriority}
+            onChange={(e) => setFilterPriority(e.target.value)}
+            className="px-3 py-1.5 text-xs bg-white/5 border border-white/10 rounded-lg text-slate-100 focus:ring-2 focus:ring-indigo-500/40"
+          >
+            <option value="">All Priorities</option>
+            <option value="HIGH">High</option>
+            <option value="MEDIUM">Medium</option>
+            <option value="LOW">Low</option>
+          </select>
+          <select
+            value={filterCompleted}
+            onChange={(e) => setFilterCompleted(e.target.value)}
+            className="px-3 py-1.5 text-xs bg-white/5 border border-white/10 rounded-lg text-slate-100 focus:ring-2 focus:ring-indigo-500/40"
+          >
+            <option value="">All Status</option>
+            <option value="false">Pending</option>
+            <option value="true">Completed</option>
+          </select>
+          <select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value)}
+            className="px-3 py-1.5 text-xs bg-white/5 border border-white/10 rounded-lg text-slate-100 focus:ring-2 focus:ring-indigo-500/40"
+          >
+            <option value="createdAt">Created Date</option>
+            <option value="dueDate">Due Date</option>
+            <option value="priority">Priority</option>
+          </select>
+          <button
+            onClick={() => setSortOrder(sortOrder === "asc" ? "desc" : "asc")}
+            className="px-3 py-1.5 text-xs bg-white/5 border border-white/10 rounded-lg text-slate-100 hover:bg-white/10"
+          >
+            {sortOrder === "asc" ? "↑ Asc" : "↓ Desc"}
+          </button>
+        </div>
+      </section>
 
       {/* --------- ADD TASK CARD --------- */}
       <section className="bg-white/5 border border-white/10 rounded-2xl p-5 backdrop-blur-xl shadow-xl shadow-black/40">

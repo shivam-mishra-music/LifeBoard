@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import axios from "axios";
 
 export default function NotesPage() {
   const router = useRouter();
@@ -28,6 +27,7 @@ export default function NotesPage() {
 
   // modal state
   const [activeNote, setActiveNote] = useState(null);
+  const [allCategories, setAllCategories] = useState([]);
 
   // ----------------- LOAD NOTES -----------------
   useEffect(() => {
@@ -39,10 +39,17 @@ export default function NotesPage() {
 
     const fetchNotes = async () => {
       try {
-        const res = await axios.get(`${API_URL}/api/notes`, {
+        const params = new URLSearchParams({ limit: "100", sortBy: "pinned" });
+        if (search) params.append("search", search);
+        if (selectedCategory === "PINNED") params.append("pinned", "true");
+        else if (selectedCategory !== "ALL") params.append("category", selectedCategory);
+
+        const res = await fetch(`${API_URL}/api/notes?${params}`, {
           headers: { Authorization: `Bearer ${token}` },
         });
-        setNotes(res.data || []);
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        setNotes(data.notes || data || []);
       } catch (err) {
         console.error("Error fetching notes:", err);
         setError("Could not load notes.");
@@ -52,7 +59,31 @@ export default function NotesPage() {
     };
 
     fetchNotes();
-  }, [API_URL, router]);
+  }, [API_URL, router, search, selectedCategory]);
+
+  useEffect(() => {
+    const token = localStorage.getItem("lifeboard_token");
+    if (!token) return;
+
+    const fetchAllNotes = async () => {
+      try {
+        const res = await fetch(`${API_URL}/api/notes?limit=1000`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const data = await res.json();
+        const allNotes = data.notes || [];
+        const cats = new Set();
+        allNotes.forEach((n) => {
+          if (n.category && n.category.trim()) cats.add(n.category.trim());
+        });
+        setAllCategories(Array.from(cats));
+      } catch (err) {
+        console.error(err);
+      }
+    };
+
+    fetchAllNotes();
+  }, [API_URL]);
 
   // ----------------- RESET FORM -----------------
   const resetForm = () => {
@@ -89,38 +120,45 @@ export default function NotesPage() {
 
       if (editingId) {
         // update
-        const res = await axios.put(
-          `${API_URL}/api/notes/${editingId}`,
-          {
+        const res = await fetch(`${API_URL}/api/notes/${editingId}`, {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
             title: trimmedTitle,
             content: trimmedContent,
             color,
             pinned,
             category: trimmedCategory,
-          },
-          { headers: { Authorization: `Bearer ${token}` } }
-        );
-
-        const updated = res.data.note;
+          }),
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
         setNotes((prev) =>
-          prev.map((n) => (n.id === updated.id ? updated : n))
+          prev.map((n) => (n.id === data.note.id ? data.note : n))
         );
         setMsg("Note updated");
       } else {
         // create
-        const res = await axios.post(
-          `${API_URL}/api/notes`,
-          {
+        const res = await fetch(`${API_URL}/api/notes`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
             title: trimmedTitle,
             content: trimmedContent,
             color,
             pinned,
             category: trimmedCategory || null,
-          },
-          { headers: { Authorization: `Bearer ${token}` } }
-        );
-
-        setNotes((prev) => [res.data.note, ...prev]);
+          }),
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        setNotes((prev) => [data.note, ...prev]);
         setMsg("Note added");
       }
 
@@ -157,9 +195,11 @@ export default function NotesPage() {
     setNotes((prev) => prev.filter((n) => n.id !== id));
 
     try {
-      await axios.delete(`${API_URL}/api/notes/${id}`, {
+      const res = await fetch(`${API_URL}/api/notes/${id}`, {
+        method: "DELETE",
         headers: { Authorization: `Bearer ${token}` },
       });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
     } catch (err) {
       console.error("Error deleting note:", err);
       setNotes(snapshot);
@@ -181,11 +221,15 @@ export default function NotesPage() {
     );
 
     try {
-      await axios.put(
-        `${API_URL}/api/notes/${note.id}`,
-        { pinned: optimistic },
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
+      const res = await fetch(`${API_URL}/api/notes/${note.id}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ pinned: optimistic }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
     } catch (err) {
       console.error("Error pinning note:", err);
       setNotes((prev) =>
@@ -216,42 +260,8 @@ export default function NotesPage() {
     return "📝";
   };
 
-  // ----------------- SEARCH + CATEGORY FILTERS -----------------
-  const categories = useMemo(() => {
-    const set = new Set();
-    notes.forEach((n) => {
-      if (n.category && n.category.trim()) set.add(n.category.trim());
-    });
-    return Array.from(set);
-  }, [notes]);
-
-  const filteredNotes = useMemo(() => {
-    let list = [...notes];
-
-    // filter by category selection
-    if (selectedCategory === "PINNED") {
-      list = list.filter((n) => n.pinned);
-    } else if (selectedCategory !== "ALL") {
-      list = list.filter((n) => n.category?.trim() === selectedCategory);
-    }
-
-    // search
-    if (search.trim()) {
-      const q = search.toLowerCase();
-      list = list.filter(
-        (n) =>
-          n.title.toLowerCase().includes(q) ||
-          n.content.toLowerCase().includes(q)
-      );
-    }
-
-    // pinned first
-    list.sort((a, b) => Number(b.pinned) - Number(a.pinned));
-    return list;
-  }, [notes, selectedCategory, search]);
-
-  const pinnedNotes = filteredNotes.filter((n) => n.pinned);
-  const otherNotes = filteredNotes.filter((n) => !n.pinned);
+  const pinnedNotes = notes.filter((n) => n.pinned);
+  const otherNotes = notes.filter((n) => !n.pinned);
 
   return (
     <div className="relative z-10 animate-fadeIn space-y-6">
@@ -287,21 +297,18 @@ export default function NotesPage() {
         <div className="flex flex-wrap gap-2 text-xs">
           <FilterPill
             label="All"
-            count={notes.length}
             active={selectedCategory === "ALL"}
             onClick={() => setSelectedCategory("ALL")}
           />
           <FilterPill
             label="Pinned"
-            count={notes.filter((n) => n.pinned).length}
             active={selectedCategory === "PINNED"}
             onClick={() => setSelectedCategory("PINNED")}
           />
-          {categories.map((cat) => (
+          {allCategories.map((cat) => (
             <FilterPill
               key={cat}
               label={cat}
-              count={notes.filter((n) => n.category?.trim() === cat).length}
               active={selectedCategory === cat}
               onClick={() => setSelectedCategory(cat)}
             />
@@ -427,7 +434,7 @@ export default function NotesPage() {
       <section className="space-y-5">
         {loadingList ? (
           <p className="text-xs text-slate-400">Loading your notes…</p>
-        ) : filteredNotes.length === 0 ? (
+        ) : notes.length === 0 ? (
           <p className="text-xs text-slate-500 italic">
             No notes match this filter. Try changing search or category.
           </p>
@@ -495,7 +502,7 @@ export default function NotesPage() {
 }
 
 /* --------- Filter pill ---------- */
-function FilterPill({ label, count, active, onClick }) {
+function FilterPill({ label, active, onClick }) {
   return (
     <button
       onClick={onClick}
@@ -506,9 +513,6 @@ function FilterPill({ label, count, active, onClick }) {
       }`}
     >
       <span>{label}</span>
-      <span className="text-[10px] px-1.5 py-[1px] rounded-full bg-black/40">
-        {count}
-      </span>
     </button>
   );
 }

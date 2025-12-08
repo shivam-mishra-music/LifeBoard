@@ -88,16 +88,29 @@ export async function createHabit(req, res) {
 export async function getHabits(req, res) {
   try {
     const userId = req.user.userId;
+    const { page = 1, limit = 10, sortBy = "createdAt", order = "asc", search, color } = req.query;
 
-    const habits = await prisma.habit.findMany({
-      where: { userId },
-      orderBy: { createdAt: "asc" },
-    });
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+    const where = { userId };
 
-    if (!habits.length) return res.json({ habits: [] });
+    if (search) where.name = { contains: search, mode: "insensitive" };
+    if (color) where.color = color;
 
+    const [habits, total] = await Promise.all([
+      prisma.habit.findMany({
+        where,
+        skip,
+        take: parseInt(limit),
+        orderBy: { [sortBy]: order },
+      }),
+      prisma.habit.count({ where }),
+    ]);
+
+    if (!habits.length) return res.json({ habits: [], pagination: { total: 0, page: parseInt(page), limit: parseInt(limit), totalPages: 0 } });
+
+    const habitIds = habits.map(h => h.id);
     const completions = await prisma.habitCompletion.findMany({
-      where: { userId },
+      where: { userId, habitId: { in: habitIds } },
     });
 
     const byHabit = new Map();
@@ -122,7 +135,15 @@ export async function getHabits(req, res) {
       };
     });
 
-    return res.json({ habits: result });
+    return res.json({
+      habits: result,
+      pagination: {
+        total,
+        page: parseInt(page),
+        limit: parseInt(limit),
+        totalPages: Math.ceil(total / parseInt(limit)),
+      },
+    });
   } catch (err) {
     console.error("Get habits error:", err);
     return res.status(500).json({ message: "Server error" });

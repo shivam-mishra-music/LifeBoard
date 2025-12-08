@@ -57,11 +57,11 @@ export default function OverviewPage() {
 
   const loadTasks = async () => {
     try {
-      const res = await axios.get(`${API_URL}/api/tasks`, {
+      const res = await axios.get(`${API_URL}/api/tasks?limit=100`, {
         headers: { Authorization: `Bearer ${token}` },
       });
 
-      const tasks = res.data || [];
+      const tasks = res.data.tasks || res.data || [];
 
       const filtered = tasks.filter((t) => {
         if (!t.dueDate) return false;
@@ -91,7 +91,7 @@ export default function OverviewPage() {
 
   const loadHabits = async () => {
     try {
-      const res = await axios.get(`${API_URL}/api/habits`, {
+      const res = await axios.get(`${API_URL}/api/habits?limit=100`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       setHabits(res.data.habits || []);

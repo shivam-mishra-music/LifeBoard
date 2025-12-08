@@ -30,17 +30,43 @@ export const createTask = async (req, res) => {
   }
 };
 
-// Get all tasks of logged-in user
+// Get all tasks of logged-in user with pagination, filtering, and sorting
 export const getTasks = async (req, res) => {
   try {
     const userId = req.user.userId;
+    const { page = 1, limit = 10, priority, completed, sortBy = "createdAt", order = "desc", search } = req.query;
 
-    const tasks = await prisma.task.findMany({
-      where: { userId },
-      orderBy: { createdAt: "desc" },
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+    const where = { userId };
+
+    if (priority) where.priority = priority.toUpperCase();
+    if (completed !== undefined) where.completed = completed === "true";
+    if (search) {
+      where.OR = [
+        { title: { contains: search, mode: "insensitive" } },
+        { description: { contains: search, mode: "insensitive" } },
+      ];
+    }
+
+    const [tasks, total] = await Promise.all([
+      prisma.task.findMany({
+        where,
+        skip,
+        take: parseInt(limit),
+        orderBy: { [sortBy]: order },
+      }),
+      prisma.task.count({ where }),
+    ]);
+
+    res.status(200).json({
+      tasks,
+      pagination: {
+        total,
+        page: parseInt(page),
+        limit: parseInt(limit),
+        totalPages: Math.ceil(total / parseInt(limit)),
+      },
     });
-
-    res.status(200).json(tasks);
   } catch (err) {
     console.error("Get tasks error:", err);
     res.status(500).json({ message: "Server error while fetching tasks" });

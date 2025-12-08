@@ -63,7 +63,7 @@ export default function HabitsPage() {
 
     setLoading(true);
     try {
-      const res = await axios.get(`${API_URL}/api/habits`, {
+      const res = await axios.get(`${API_URL}/api/habits?limit=100`, {
         headers: { Authorization: `Bearer ${t}` },
       });
       setHabits(res.data.habits || []);

@@ -33,20 +33,48 @@ export const createNote = async (req, res) => {
   }
 };
 
-// Get all notes for logged-in user
+// Get all notes for logged-in user with pagination, filtering, and sorting
 export const getNotes = async (req, res) => {
   try {
     const userId = req.user.userId;
+    const { page = 1, limit = 10, pinned, color, category, sortBy = "updatedAt", order = "desc", search } = req.query;
 
-    const notes = await prisma.note.findMany({
-      where: { userId },
-      orderBy: [
-        { pinned: "desc" },
-        { updatedAt: "desc" },
-      ],
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+    const where = { userId };
+
+    if (pinned !== undefined) where.pinned = pinned === "true";
+    if (color) where.color = color;
+    if (category) where.category = category;
+    if (search) {
+      where.OR = [
+        { title: { contains: search, mode: "insensitive" } },
+        { content: { contains: search, mode: "insensitive" } },
+      ];
+    }
+
+    const orderBy = sortBy === "pinned" 
+      ? [{ pinned: "desc" }, { updatedAt: "desc" }]
+      : { [sortBy]: order };
+
+    const [notes, total] = await Promise.all([
+      prisma.note.findMany({
+        where,
+        skip,
+        take: parseInt(limit),
+        orderBy,
+      }),
+      prisma.note.count({ where }),
+    ]);
+
+    res.status(200).json({
+      notes,
+      pagination: {
+        total,
+        page: parseInt(page),
+        limit: parseInt(limit),
+        totalPages: Math.ceil(total / parseInt(limit)),
+      },
     });
-
-    res.status(200).json(notes);
   } catch (err) {
     console.error("Get notes error:", err);
     res.status(500).json({ message: "Server error while fetching notes" });
