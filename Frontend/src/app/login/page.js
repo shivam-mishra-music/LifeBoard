@@ -25,8 +25,8 @@ export default function Login() {
         form
       );
 
-      // Save token
       localStorage.setItem("lifeboard_token", res.data.token);
+      localStorage.setItem("lifeboard_user_name", res.data.user?.name || "User");
       setMsg("Login successful! Redirecting…");
 
       setTimeout(() => {
@@ -34,7 +34,7 @@ export default function Login() {
       }, 1200);
 
     } catch (err) {
-      setMsg(err.response?.data?.message || "Login failed");
+      setMsg(err.response?.data?.message || "Login failed. Please try again.");
     }
 
     setLoading(false);
@@ -71,7 +71,9 @@ export default function Login() {
         </p>
 
         {msg && (
-          <p className="text-indigo-300 text-center mb-3 text-sm font-medium animate-fadeIn">
+          <p className={`text-center mb-3 text-sm font-medium animate-fadeIn ${
+            msg.includes("successful") ? "text-green-400" : "text-red-400"
+          }`}>
             {msg}
           </p>
         )}
