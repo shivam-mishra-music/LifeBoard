@@ -7,7 +7,7 @@ const prisma = new PrismaClient();
 export const createNote = async (req, res) => {
   try {
     const userId = req.user.userId;
-    const { title, content, color, pinned } = req.body;
+    const { title, content, color, pinned, category } = req.body;
 
     if (!title || !title.trim()) {
       return res.status(400).json({ message: "Title is required" });
@@ -22,6 +22,7 @@ export const createNote = async (req, res) => {
         content: content.trim(),
         color: color || null,
         pinned: !!pinned,
+        category: category && category.trim() ? category.trim() : null,
         userId,
       },
     });

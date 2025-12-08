@@ -27,7 +27,28 @@ export default function NotesPage() {
 
   // modal state
   const [activeNote, setActiveNote] = useState(null);
-  const [allCategories, setAllCategories] = useState([]);
+  const [allNotesForCategories, setAllNotesForCategories] = useState([]);
+
+  // ----------------- LOAD ALL NOTES FOR CATEGORIES -----------------
+  useEffect(() => {
+    const token = localStorage.getItem("lifeboard_token");
+    if (!token) return;
+
+    const fetchAllNotes = async () => {
+      try {
+        const res = await fetch(`${API_URL}/api/notes?limit=1000`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const data = await res.json();
+        console.log("📝 Fetched all notes for categories:", data.notes);
+        setAllNotesForCategories(data.notes || []);
+      } catch (err) {
+        console.error(err);
+      }
+    };
+
+    fetchAllNotes();
+  }, [API_URL]);
 
   // ----------------- LOAD NOTES -----------------
   useEffect(() => {
@@ -60,30 +81,6 @@ export default function NotesPage() {
 
     fetchNotes();
   }, [API_URL, router, search, selectedCategory]);
-
-  useEffect(() => {
-    const token = localStorage.getItem("lifeboard_token");
-    if (!token) return;
-
-    const fetchAllNotes = async () => {
-      try {
-        const res = await fetch(`${API_URL}/api/notes?limit=1000`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        const data = await res.json();
-        const allNotes = data.notes || [];
-        const cats = new Set();
-        allNotes.forEach((n) => {
-          if (n.category && n.category.trim()) cats.add(n.category.trim());
-        });
-        setAllCategories(Array.from(cats));
-      } catch (err) {
-        console.error(err);
-      }
-    };
-
-    fetchAllNotes();
-  }, [API_URL]);
 
   // ----------------- RESET FORM -----------------
   const resetForm = () => {
@@ -139,26 +136,33 @@ export default function NotesPage() {
         setNotes((prev) =>
           prev.map((n) => (n.id === data.note.id ? data.note : n))
         );
+        setAllNotesForCategories((prev) =>
+          prev.map((n) => (n.id === data.note.id ? data.note : n))
+        );
         setMsg("Note updated");
       } else {
         // create
+        const payload = {
+          title: trimmedTitle,
+          content: trimmedContent,
+          color,
+          pinned,
+          category: trimmedCategory || null,
+        };
+        console.log("📤 Creating note with payload:", payload);
         const res = await fetch(`${API_URL}/api/notes`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
             Authorization: `Bearer ${token}`,
           },
-          body: JSON.stringify({
-            title: trimmedTitle,
-            content: trimmedContent,
-            color,
-            pinned,
-            category: trimmedCategory || null,
-          }),
+          body: JSON.stringify(payload),
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
+        console.log("✅ Note created, response:", data.note);
         setNotes((prev) => [data.note, ...prev]);
+        setAllNotesForCategories((prev) => [data.note, ...prev]);
         setMsg("Note added");
       }
 
@@ -192,7 +196,9 @@ export default function NotesPage() {
     }
 
     const snapshot = notes;
+    const allSnapshot = allNotesForCategories;
     setNotes((prev) => prev.filter((n) => n.id !== id));
+    setAllNotesForCategories((prev) => prev.filter((n) => n.id !== id));
 
     try {
       const res = await fetch(`${API_URL}/api/notes/${id}`, {
@@ -203,6 +209,7 @@ export default function NotesPage() {
     } catch (err) {
       console.error("Error deleting note:", err);
       setNotes(snapshot);
+      setAllNotesForCategories(allSnapshot);
       setError("Could not delete note.");
     }
   };
@@ -260,6 +267,20 @@ export default function NotesPage() {
     return "📝";
   };
 
+  const allCategories = useMemo(() => {
+    const cats = new Set();
+    allNotesForCategories.forEach((n) => {
+      console.log(`Note ID ${n.id}: category = "${n.category}"`);
+      if (n.category && n.category !== "null" && n.category.trim()) {
+        cats.add(n.category.trim());
+      }
+    });
+    const result = Array.from(cats).sort();
+    console.log("🏷️ All categories extracted:", result);
+    console.log("📊 Total notes for categories:", allNotesForCategories.length);
+    return result;
+  }, [allNotesForCategories]);
+
   const pinnedNotes = notes.filter((n) => n.pinned);
   const otherNotes = notes.filter((n) => !n.pinned);
 
@@ -294,7 +315,7 @@ export default function NotesPage() {
         </div>
 
         {/* Filter pills: All, Pinned, Categories */}
-        <div className="flex flex-wrap gap-2 text-xs">
+        <div className="flex flex-wrap gap-2 text-xs max-h-32 overflow-y-auto">
           <FilterPill
             label="All"
             active={selectedCategory === "ALL"}
