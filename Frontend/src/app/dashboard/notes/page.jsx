@@ -40,7 +40,6 @@ export default function NotesPage() {
           headers: { Authorization: `Bearer ${token}` },
         });
         const data = await res.json();
-        console.log("📝 Fetched all notes for categories:", data.notes);
         setAllNotesForCategories(data.notes || []);
       } catch (err) {
         console.error(err);
@@ -142,25 +141,22 @@ export default function NotesPage() {
         setMsg("Note updated");
       } else {
         // create
-        const payload = {
-          title: trimmedTitle,
-          content: trimmedContent,
-          color,
-          pinned,
-          category: trimmedCategory || null,
-        };
-        console.log("📤 Creating note with payload:", payload);
         const res = await fetch(`${API_URL}/api/notes`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
             Authorization: `Bearer ${token}`,
           },
-          body: JSON.stringify(payload),
+          body: JSON.stringify({
+            title: trimmedTitle,
+            content: trimmedContent,
+            color,
+            pinned,
+            category: trimmedCategory || null,
+          }),
         });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
-        console.log("✅ Note created, response:", data.note);
         setNotes((prev) => [data.note, ...prev]);
         setAllNotesForCategories((prev) => [data.note, ...prev]);
         setMsg("Note added");
@@ -270,15 +266,11 @@ export default function NotesPage() {
   const allCategories = useMemo(() => {
     const cats = new Set();
     allNotesForCategories.forEach((n) => {
-      console.log(`Note ID ${n.id}: category = "${n.category}"`);
       if (n.category && n.category !== "null" && n.category.trim()) {
         cats.add(n.category.trim());
       }
     });
-    const result = Array.from(cats).sort();
-    console.log("🏷️ All categories extracted:", result);
-    console.log("📊 Total notes for categories:", allNotesForCategories.length);
-    return result;
+    return Array.from(cats).sort();
   }, [allNotesForCategories]);
 
   const pinnedNotes = notes.filter((n) => n.pinned);

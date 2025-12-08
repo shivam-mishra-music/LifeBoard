@@ -20,13 +20,11 @@ export default function CalendarPage() {
   const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
   const [authToken, setAuthToken] = useState(null);
-
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [monthSummaries, setMonthSummaries] = useState([]);
   const [tasksByDate, setTasksByDate] = useState({});
   const [loading, setLoading] = useState(true);
 
-  // Modal state
   const [openModal, setOpenModal] = useState(false);
   const [selectedDate, setSelectedDate] = useState(null);
   const [currentSummary, setCurrentSummary] = useState(null);
@@ -36,22 +34,17 @@ export default function CalendarPage() {
   const [journal, setJournal] = useState("");
   const [banner, setBanner] = useState("");
 
-  // -------- Auth check --------
+  // ---------------- AUTH CHECK ----------------
   useEffect(() => {
     const token = localStorage.getItem("lifeboard_token");
-    if (!token) {
-      router.push("/login");
-    } else {
-      setAuthToken(token);
-    }
+    if (!token) router.push("/login");
+    else setAuthToken(token);
   }, [router]);
 
-  // -------- Helpers for dates --------
   const today = startOfDay(new Date());
-
   const isFutureDate = (date) => isAfter(startOfDay(date), today);
 
-  // -------- Load month summaries + tasks --------
+  // ---------------- LOAD MONTH DATA ----------------
   const loadMonth = async (tokenOverride) => {
     const token = tokenOverride || authToken;
     if (!token) return;
@@ -64,26 +57,34 @@ export default function CalendarPage() {
         axios.get(`${API_URL}/api/day-summary?month=${monthStr}`, {
           headers: { Authorization: `Bearer ${token}` },
         }),
-        axios.get(`${API_URL}/api/tasks`, {
+
+        // Load ALL tasks (limit high)
+        axios.get(`${API_URL}/api/tasks?limit=500`, {
           headers: { Authorization: `Bearer ${token}` },
         }),
       ]);
 
+      // Monthly summaries
       setMonthSummaries(summaryRes.data.summaries || []);
 
-      // Build map of tasks by date (only tasks with dueDate in this month)
+      // FIXED: Correctly read tasks array
+      const tasks = tasksRes.data.tasks || [];
+
+      // Build task mapping for calendar
       const map = {};
-      const tasks = tasksRes.data || [];
 
       tasks.forEach((t) => {
         if (!t.dueDate) return;
+
         const d = new Date(t.dueDate);
+
         if (
           d.getMonth() !== currentMonth.getMonth() ||
           d.getFullYear() !== currentMonth.getFullYear()
         ) {
           return;
         }
+
         const key = format(d, "yyyy-MM-dd");
         if (!map[key]) map[key] = [];
         map[key].push(t);
@@ -91,8 +92,8 @@ export default function CalendarPage() {
 
       setTasksByDate(map);
     } catch (err) {
-      console.error("Month load error:", err);
-      setBanner("Could not load calendar data.");
+      console.error("LOAD MONTH ERROR:", err);
+      setBanner("Could not load calendar.");
       setTimeout(() => setBanner(""), 2000);
     } finally {
       setLoading(false);
@@ -101,10 +102,9 @@ export default function CalendarPage() {
 
   useEffect(() => {
     if (authToken) loadMonth(authToken);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authToken, currentMonth]);
 
-  // -------- Get summary / tasks for a given day --------
+  // ---------------- HELPERS ----------------
   const getSummaryForDay = (date) => {
     const key = format(date, "yyyy-MM-dd");
     return monthSummaries.find(
@@ -117,19 +117,19 @@ export default function CalendarPage() {
     return tasksByDate[key] || [];
   };
 
-  // -------- Open modal for a date --------
+  // ---------------- OPEN MODAL ----------------
   const openDayModal = async (date) => {
     if (!authToken) return;
 
     setSelectedDate(date);
     setOpenModal(true);
-    setCurrentSummary(null); // we'll refill if exists
+    setCurrentSummary(null);
 
     try {
-      const dateStr = format(date, "yyyy-MM-dd");
-      const res = await axios.get(`${API_URL}/api/day-summary/${dateStr}`, {
-        headers: { Authorization: `Bearer ${authToken}` },
-      });
+      const res = await axios.get(
+        `${API_URL}/api/day-summary/${format(date, "yyyy-MM-dd")}`,
+        { headers: { Authorization: `Bearer ${authToken}` } }
+      );
 
       if (res.data.summary) {
         const s = res.data.summary;
@@ -138,76 +138,66 @@ export default function CalendarPage() {
         setProductivity(s.productivity || 3);
         setJournal(s.journal || "");
       } else {
-        // no summary yet
         setMood("");
         setProductivity(3);
         setJournal("");
       }
-    } catch (err) {
-      console.log("No summary yet for this date.");
+    } catch {
       setMood("");
       setProductivity(3);
       setJournal("");
     }
   };
 
-  // -------- Save / update summary --------
+  // ---------------- SAVE SUMMARY ----------------
   const saveSummary = async () => {
-  if (!authToken || !selectedDate) return;
+    if (!authToken || !selectedDate) return;
 
-  const future = isFutureDate(selectedDate);
-  const dateKey = format(selectedDate, "yyyy-MM-dd");
+    const future = isFutureDate(selectedDate);
+    const dateKey = format(selectedDate, "yyyy-MM-dd");
 
-  const basePayload = {
-    date: dateKey,
-    journal: journal.trim() || null,
+    const payload = {
+      date: dateKey,
+      journal: journal.trim() || null,
+    };
+
+    if (!future && !currentSummary)
+      payload.mood = mood || null, payload.productivity = productivity;
+
+    try {
+      if (currentSummary) {
+        await axios.put(
+          `${API_URL}/api/day-summary/${currentSummary.id}`,
+          { journal: journal.trim() || null },
+          { headers: { Authorization: `Bearer ${authToken}` } }
+        );
+      } else {
+        await axios.post(`${API_URL}/api/day-summary`, payload, {
+          headers: { Authorization: `Bearer ${authToken}` },
+        });
+      }
+
+      // refresh month
+      loadMonth(authToken);
+
+      setOpenModal(false);
+      setBanner("Saved!");
+      setTimeout(() => setBanner(""), 1500);
+    } catch (err) {
+      console.error("SAVE ERROR:", err);
+      setBanner("Could not save.");
+      setTimeout(() => setBanner(""), 2000);
+    }
   };
 
-  const createPayload = future
-    ? basePayload
-    : { ...basePayload, mood: mood || null, productivity };
-
-  try {
-    if (currentSummary && currentSummary.id) {
-      await axios.put(
-        `${API_URL}/api/day-summary/${currentSummary.id}`,
-        { journal: journal.trim() || null },
-        { headers: { Authorization: `Bearer ${authToken}` } }
-      );
-    } else {
-      await axios.post(`${API_URL}/api/day-summary`, createPayload, {
-        headers: { Authorization: `Bearer ${authToken}` },
-      });
-    }
-
-    // 🔥 FIX — Force fetch latest data (no stale previews)
-    const monthStr = format(currentMonth, "yyyy-MM");
-    const refreshed = await axios.get(`${API_URL}/api/day-summary?month=${monthStr}`, {
-      headers: { Authorization: `Bearer ${authToken}` }
-    });
-
-    setMonthSummaries(refreshed.data.summaries || []);
-
-    setOpenModal(false);
-    setBanner("Saved!");
-    setTimeout(() => setBanner(""), 1500);
-
-  } catch (err) {
-    console.error("Save error:", err);
-    setBanner("Could not save.");
-    setTimeout(() => setBanner(""), 2000);
-  }
-};
-
-
-  // -------- Prepare calendar days --------
+  // ---------------- CALENDAR RENDER ----------------
   const monthDays = eachDayOfInterval({
     start: startOfMonth(currentMonth),
     end: endOfMonth(currentMonth),
   });
 
   const firstDay = monthDays[0];
-  const weekdayIndex = (firstDay.getDay() + 6) % 7; // Mon-first
+  const weekdayIndex = (firstDay.getDay() + 6) % 7;
   const leadingBlanks = Array.from({ length: weekdayIndex });
 
   const moodColors = {
@@ -216,15 +206,6 @@ export default function CalendarPage() {
     bad: "bg-rose-500/10 border-rose-400/60",
   };
 
-  const moodLabel = (m) => {
-    if (m === "good") return "😊 Good";
-    if (m === "moderate") return "😐 Moderate";
-    if (m === "bad") return "😢 Bad";
-    return "";
-  };
-
-  const selectedTasks = selectedDate ? getTasksForDay(selectedDate) : [];
-
   return (
     <div className="relative z-10 space-y-6 text-white">
       {/* HEADER */}
@@ -232,63 +213,49 @@ export default function CalendarPage() {
         <p className="text-xs uppercase tracking-[0.18em] text-indigo-300/80">
           Calendar
         </p>
-        <h1 className="text-3xl font-semibold">
-          Track your day, tasks & productivity
-        </h1>
-        <p className="text-sm text-slate-400 mt-1">
-          Tap on any day to log mood, productivity & journal. Future days show
-          upcoming task deadlines.
-        </p>
+        <h1 className="text-3xl font-semibold">Track your days smartly</h1>
       </header>
 
       {/* BANNER */}
       {banner && (
-        <div className="text-sm px-3 py-2 rounded-lg bg-slate-800/80 border border-slate-600/60 text-slate-100 inline-flex">
+        <div className="px-3 py-2 text-sm rounded-lg bg-slate-800/80 border border-slate-600/60 inline-flex">
           {banner}
         </div>
       )}
 
-      {/* MONTH SELECTOR */}
+      {/* MONTH NAVIGATION */}
       <div className="flex items-center justify-between max-w-md mt-2">
         <button
           onClick={() =>
             setCurrentMonth(
-              new Date(
-                currentMonth.getFullYear(),
-                currentMonth.getMonth() - 1,
-                1
-              )
+              new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1)
             )
           }
-          className="px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-sm border border-white/10"
+          className="px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10"
         >
           ← Prev
         </button>
 
-        <h2 className="text-lg font-semibold tracking-wide">
+        <h2 className="text-lg font-semibold">
           {format(currentMonth, "LLLL yyyy")}
         </h2>
 
         <button
           onClick={() =>
             setCurrentMonth(
-              new Date(
-                currentMonth.getFullYear(),
-                currentMonth.getMonth() + 1,
-                1
-              )
+              new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1)
             )
           }
-          className="px-3 py-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-sm border border-white/10"
+          className="px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 hover:bg-white/10"
         >
           Next →
         </button>
       </div>
 
-      {/* WEEKDAY HEADERS */}
+      {/* WEEKDAY COLUMN HEADERS */}
       <div className="grid grid-cols-7 gap-2 mt-4 text-[11px] text-slate-400">
         {WEEKDAYS.map((d) => (
-          <div key={d} className="text-center uppercase tracking-wide">
+          <div key={d} className="text-center uppercase">
             {d}
           </div>
         ))}
@@ -296,76 +263,58 @@ export default function CalendarPage() {
 
       {/* CALENDAR GRID */}
       <div className="grid grid-cols-7 gap-2 mt-1">
-        {/* leading blanks */}
-        {leadingBlanks.map((_, idx) => (
-          <div key={`blank-${idx}`} />
+        {leadingBlanks.map((_, i) => (
+          <div key={i} />
         ))}
 
         {monthDays.map((day) => {
           const summary = getSummaryForDay(day);
-          const tasksForDay = getTasksForDay(day);
-
+          const tasks = getTasksForDay(day);
           const future = isFutureDate(day);
           const todayFlag = isSameDay(day, today);
 
-          const moodClass = summary?.mood
-            ? moodColors[summary.mood] || "bg-white/5 border-white/15"
-            : "bg-white/5 border-white/10";
-
           return (
             <button
-              key={day.toISOString()}
+              key={day}
               onClick={() => openDayModal(day)}
-              className={`h-28 rounded-2xl p-2 text-left border relative overflow-hidden transition 
-                ${moodClass}
-                ${future ? "opacity-90" : ""}
-                ${todayFlag ? "ring-2 ring-indigo-500/80" : ""}
-                hover:border-indigo-400/70 hover:bg-indigo-500/10`}
+              className={`h-28 rounded-2xl p-2 text-left border ${
+                summary?.mood
+                  ? moodColors[summary.mood]
+                  : "bg-white/5 border-white/10"
+              } hover:bg-indigo-500/10 hover:border-indigo-300 transition ${
+                todayFlag ? "ring-2 ring-indigo-500/80" : ""
+              }`}
             >
-              {/* Date number */}
-              <p className="text-xs font-semibold text-slate-100 flex items-center justify-between">
+              <p className="text-xs font-semibold flex justify-between">
                 <span>{format(day, "d")}</span>
-                {future && tasksForDay.length > 0 && (
-                  <span className="text-[10px] px-1.5 py-[1px] rounded-full bg-amber-500/20 text-amber-200 border border-amber-400/60">
+
+                {future && tasks.length > 0 && (
+                  <span className="text-[10px] px-1.5 rounded-full bg-amber-500/20 text-amber-200 border border-amber-400/60">
                     Upcoming
                   </span>
                 )}
               </p>
 
-              {/* Summary mood / productivity / journal peek */}
+              {/* MOOD / PRODUCTIVITY */}
               {summary && (
-                <div className="mt-1.5 text-[11px] space-y-[2px]">
-                  {summary.mood && <p>{moodLabel(summary.mood)}</p>}
+                <div className="mt-1 text-[10px] space-y-[1px]">
+                  {summary.mood && <p>{summary.mood}</p>}
                   {summary.productivity && (
-                    <p className="text-[10px] text-slate-300">
-                      Productivity {summary.productivity}/5
-                    </p>
-                  )}
-                  {summary.journal && (
-                    <p className="text-[10px] text-slate-200/90 flex items-center gap-1 truncate">
-                      <span>📝</span>
-                      <span className="truncate">{summary.journal}</span>
-                    </p>
+                    <p>Productivity {summary.productivity}/5</p>
                   )}
                 </div>
               )}
 
-              {/* Tasks preview */}
-              {tasksForDay.length > 0 && (
-                <div className="mt-1.5 space-y-[2px]">
-                  {tasksForDay.slice(0, 2).map((task) => (
-                    <p
-                      key={task.id}
-                      className="text-[10px] text-slate-200 truncate flex items-center gap-1"
-                    >
-                      <span>🎯</span>
-                      <span className="truncate">{task.title}</span>
+              {/* TASKS LIST */}
+              {tasks.length > 0 && (
+                <div className="mt-1.5 text-[10px] space-y-[2px]">
+                  {tasks.slice(0, 2).map((t) => (
+                    <p key={t.id} className="truncate flex items-center gap-1">
+                      <span>🎯</span> {t.title}
                     </p>
                   ))}
-                  {tasksForDay.length > 2 && (
-                    <p className="text-[10px] text-slate-400">
-                      +{tasksForDay.length - 2} more…
-                    </p>
+                  {tasks.length > 2 && (
+                    <p className="text-slate-400">+{tasks.length - 2} more…</p>
                   )}
                 </div>
               )}
@@ -386,7 +335,7 @@ export default function CalendarPage() {
           setJournal={setJournal}
           isFuture={isFutureDate(selectedDate)}
           hasSummary={!!currentSummary}
-          tasks={selectedTasks}
+          tasks={getTasksForDay(selectedDate)}
           onClose={() => setOpenModal(false)}
           onSave={saveSummary}
         />
@@ -395,8 +344,9 @@ export default function CalendarPage() {
   );
 }
 
-/* ---------------- MODAL COMPONENT ---------------- */
-
+/* ------------------------------------------
+   MODAL COMPONENT
+------------------------------------------ */
 function DayModal({
   date,
   mood,
@@ -416,58 +366,23 @@ function DayModal({
   const canEditMood = !isFuture && !hasSummary;
   const canEditProductivity = !isFuture && !hasSummary;
 
-  const moodOptions = [
-    {
-      key: "good",
-      label: "Good",
-      icon: "😊",
-      color:
-        "bg-emerald-500/20 border-emerald-400 text-emerald-200 hover:bg-emerald-500/25",
-    },
-    {
-      key: "moderate",
-      label: "Moderate",
-      icon: "😐",
-      color:
-        "bg-amber-500/20 border-amber-400 text-amber-200 hover:bg-amber-500/25",
-    },
-    {
-      key: "bad",
-      label: "Bad",
-      icon: "😢",
-      color:
-        "bg-rose-500/20 border-rose-400 text-rose-200 hover:bg-rose-500/25",
-    },
-  ];
-
-  const disabledClasses =
-    "opacity-40 cursor-not-allowed bg-white/5 border-white/10";
-
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50">
-      <div className="bg-[#0e1525] border border-white/10 rounded-2xl p-6 w-[90%] max-w-md shadow-2xl shadow-black/60">
-        <h2 className="text-xl font-semibold mb-2">{formatted}</h2>
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
+      <div className="bg-[#0e1525] border border-white/10 rounded-2xl p-6 w-[90%] max-w-md">
+        <h2 className="text-xl font-semibold">{formatted}</h2>
 
-        {/* Tasks with deadline this day */}
-        {tasks && tasks.length > 0 && (
-          <div className="mb-4 text-xs">
-            <p className="text-slate-300 mb-1 flex items-center gap-1">
-              <span>🎯</span>
-              <span>Tasks with deadline this day</span>
-            </p>
-            <div className="space-y-1 max-h-24 overflow-y-auto pr-1">
+        {/* TASKS */}
+        {tasks.length > 0 && (
+          <div className="mt-3 text-xs">
+            <p className="text-slate-300 mb-1">🎯 Tasks due</p>
+            <div className="space-y-1 max-h-24 overflow-y-auto">
               {tasks.map((t) => (
-                <div
-                  key={t.id}
-                  className="flex items-start gap-2 text-slate-200/90"
-                >
-                  <span className="mt-[2px]">•</span>
+                <div key={t.id} className="flex gap-2">
+                  <span className="mt-[1px]">•</span>
                   <div>
-                    <p className="font-medium text-[12px] leading-tight">
-                      {t.title}
-                    </p>
+                    <p className="font-medium text-[12px]">{t.title}</p>
                     {t.description && (
-                      <p className="text-[11px] text-slate-400 line-clamp-2">
+                      <p className="text-[11px] text-slate-400">
                         {t.description}
                       </p>
                     )}
@@ -475,99 +390,60 @@ function DayModal({
                 </div>
               ))}
             </div>
-            <div className="h-px bg-white/10 mt-3" />
+            <div className="h-px bg-white/10 my-3" />
           </div>
         )}
 
-        {/* Mood */}
-        <p className="text-sm text-slate-300 mb-1 flex items-center justify-between">
-          <span>Mood</span>
-          {isFuture && (
-            <span className="text-[11px] text-slate-500">
-              Mood only for today / past
-            </span>
-          )}
-          {hasSummary && !isFuture && (
-            <span className="text-[11px] text-slate-500">
-              Mood locked (already logged)
-            </span>
-          )}
-        </p>
-        <div className="flex gap-2 mb-4">
-          {moodOptions.map((m) => (
+        {/* MOOD */}
+        <p className="text-sm mb-1">Mood</p>
+        <div className="flex gap-2 mb-3">
+          {["good", "moderate", "bad"].map((m) => (
             <button
-              key={m.key}
-              type="button"
+              key={m}
               disabled={!canEditMood}
-              onClick={() => canEditMood && setMood(m.key)}
-              className={`px-3 py-1 rounded-lg border text-sm flex items-center gap-1 transition 
-                ${
-                  !canEditMood
-                    ? disabledClasses
-                    : mood === m.key
-                    ? m.color
-                    : "bg-white/5 border-white/20 hover:bg-white/10"
-                }`}
+              onClick={() => canEditMood && setMood(m)}
+              className={`px-3 py-1.5 rounded-lg border text-sm ${
+                mood === m
+                  ? "bg-indigo-500/30 border-indigo-400"
+                  : "bg-white/5 border-white/10"
+              }`}
             >
-              <span>{m.icon}</span>
-              <span className="capitalize">{m.label}</span>
+              {m}
             </button>
           ))}
         </div>
 
-        {/* Productivity slider */}
-        <p className="text-sm text-slate-300 mb-1 flex items-center justify-between">
-          <span>Productivity: {productivity}/5</span>
-          {isFuture && (
-            <span className="text-[11px] text-slate-500">
-              Can’t rate future days
-            </span>
-          )}
-          {hasSummary && !isFuture && (
-            <span className="text-[11px] text-slate-500">
-              Already logged, journal still editable
-            </span>
-          )}
-        </p>
+        {/* PRODUCTIVITY */}
+        <p className="text-sm mb-1">Productivity: {productivity}/5</p>
         <input
           type="range"
           min="1"
           max="5"
-          value={productivity}
           disabled={!canEditProductivity}
+          value={productivity}
           onChange={(e) => setProductivity(Number(e.target.value))}
-          className={`w-full mb-4 ${
-            !canEditProductivity ? "opacity-40 cursor-not-allowed" : ""
-          }`}
+          className="w-full mb-4"
         />
 
-        {/* Journal */}
-        <p className="text-sm text-slate-300 mb-1">Journal / day notes</p>
+        {/* JOURNAL */}
+        <p className="text-sm mb-1">Journal</p>
         <textarea
+          className="w-full h-28 p-3 bg-white/5 border border-white/10 rounded-lg"
           value={journal}
           onChange={(e) => setJournal(e.target.value)}
-          placeholder={
-            isFuture
-              ? "Write plans or notes for this day…"
-              : "Write journal / notes about your day…"
-          }
-          className="w-full h-28 bg-white/5 border border-white/10 rounded-lg p-3 text-sm text-slate-200 focus:ring-2 focus:ring-indigo-500 focus:outline-none resize-none"
         />
 
-        {/* Buttons */}
-        <div className="flex justify-end gap-3 mt-5">
+        {/* BUTTONS */}
+        <div className="flex justify-end gap-3 mt-4">
           <button
-            type="button"
             onClick={onClose}
-            className="px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 text-sm"
+            className="px-4 py-2 bg-white/10 rounded-lg"
           >
             Close
           </button>
-
           <button
-            type="button"
             onClick={onSave}
-            className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-sm shadow shadow-indigo-500/40"
+            className="px-4 py-2 bg-indigo-600 rounded-lg font-semibold"
           >
             Save
           </button>
