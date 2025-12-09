@@ -236,9 +236,11 @@ export default function OverviewPage() {
 
         {/* Completed Tasks */}
         <div className="p-4 rounded-2xl bg-gradient-to-br from-blue-600/30 via-blue-600/10 border border-white/10 shadow-xl">
-          <p className="text-xs text-slate-300">Completed Tasks</p>
-          <h2 className="text-2xl font-bold mt-2">{completedTasks}</h2>
-        </div>
+  <p className="text-xs text-slate-300">Tasks Completed Today</p>
+  <h2 className="text-2xl font-bold mt-2">
+    {todayTasks.filter((t) => t.completed).length} / {todayTasks.length}
+  </h2>
+</div>
 
         {/* Pending Tasks */}
         <div className="p-4 rounded-2xl bg-gradient-to-br from-pink-600/30 via-pink-600/10 border border-white/10 shadow-xl">

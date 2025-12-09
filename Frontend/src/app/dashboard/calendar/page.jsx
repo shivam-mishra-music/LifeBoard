@@ -15,6 +15,24 @@ import {
 
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
+/* --------------------------------------------------------
+   MOOD HELPERS
+-------------------------------------------------------- */
+const moodEmoji = (m) =>
+  m === "good" ? "😊" :
+  m === "moderate" ? "😐" :
+  m === "bad" ? "😢" :
+  "—";
+
+const moodLabel = (m) =>
+  m === "good" ? "Good" :
+  m === "moderate" ? "Moderate" :
+  m === "bad" ? "Bad" :
+  "Not logged";
+
+/* --------------------------------------------------------
+   MAIN PAGE
+-------------------------------------------------------- */
 export default function CalendarPage() {
   const router = useRouter();
   const API_URL = process.env.NEXT_PUBLIC_API_URL;
@@ -32,22 +50,29 @@ export default function CalendarPage() {
   const [mood, setMood] = useState("");
   const [productivity, setProductivity] = useState(3);
   const [journal, setJournal] = useState("");
+
   const [banner, setBanner] = useState("");
 
-  // ---------------- AUTH CHECK ----------------
+  /* --------------------------------------------------------
+     AUTH
+  -------------------------------------------------------- */
   useEffect(() => {
     const token = localStorage.getItem("lifeboard_token");
     if (!token) router.push("/login");
     else setAuthToken(token);
   }, [router]);
 
+  /* --------------------------------------------------------
+     DATE HELPERS
+  -------------------------------------------------------- */
   const today = startOfDay(new Date());
   const isFutureDate = (date) => isAfter(startOfDay(date), today);
 
-  // ---------------- LOAD MONTH DATA ----------------
-  const loadMonth = async (tokenOverride) => {
-    const token = tokenOverride || authToken;
-    if (!token) return;
+  /* --------------------------------------------------------
+     LOAD DATA FOR MONTH
+  -------------------------------------------------------- */
+  const loadMonth = async () => {
+    if (!authToken) return;
 
     setLoading(true);
     const monthStr = format(currentMonth, "yyyy-MM");
@@ -55,22 +80,16 @@ export default function CalendarPage() {
     try {
       const [summaryRes, tasksRes] = await Promise.all([
         axios.get(`${API_URL}/api/day-summary?month=${monthStr}`, {
-          headers: { Authorization: `Bearer ${token}` },
+          headers: { Authorization: `Bearer ${authToken}` },
         }),
-
-        // Load ALL tasks (limit high)
         axios.get(`${API_URL}/api/tasks?limit=500`, {
-          headers: { Authorization: `Bearer ${token}` },
+          headers: { Authorization: `Bearer ${authToken}` },
         }),
       ]);
 
-      // Monthly summaries
       setMonthSummaries(summaryRes.data.summaries || []);
 
-      // FIXED: Correctly read tasks array
       const tasks = tasksRes.data.tasks || [];
-
-      // Build task mapping for calendar
       const map = {};
 
       tasks.forEach((t) => {
@@ -78,12 +97,8 @@ export default function CalendarPage() {
 
         const d = new Date(t.dueDate);
 
-        if (
-          d.getMonth() !== currentMonth.getMonth() ||
-          d.getFullYear() !== currentMonth.getFullYear()
-        ) {
-          return;
-        }
+        if (d.getMonth() !== currentMonth.getMonth()) return;
+        if (d.getFullYear() !== currentMonth.getFullYear()) return;
 
         const key = format(d, "yyyy-MM-dd");
         if (!map[key]) map[key] = [];
@@ -92,32 +107,32 @@ export default function CalendarPage() {
 
       setTasksByDate(map);
     } catch (err) {
-      console.error("LOAD MONTH ERROR:", err);
+      console.error(err);
       setBanner("Could not load calendar.");
       setTimeout(() => setBanner(""), 2000);
-    } finally {
-      setLoading(false);
     }
+
+    setLoading(false);
   };
 
   useEffect(() => {
-    if (authToken) loadMonth(authToken);
+    if (authToken) loadMonth();
   }, [authToken, currentMonth]);
 
-  // ---------------- HELPERS ----------------
-  const getSummaryForDay = (date) => {
-    const key = format(date, "yyyy-MM-dd");
-    return monthSummaries.find(
-      (s) => format(new Date(s.date), "yyyy-MM-dd") === key
+  /* --------------------------------------------------------
+     HELPERS
+  -------------------------------------------------------- */
+  const getSummaryForDay = (date) =>
+    monthSummaries.find(
+      (s) => format(new Date(s.date), "yyyy-MM-dd") === format(date, "yyyy-MM-dd")
     );
-  };
 
-  const getTasksForDay = (date) => {
-    const key = format(date, "yyyy-MM-dd");
-    return tasksByDate[key] || [];
-  };
+  const getTasksForDay = (date) =>
+    tasksByDate[format(date, "yyyy-MM-dd")] || [];
 
-  // ---------------- OPEN MODAL ----------------
+  /* --------------------------------------------------------
+     OPEN MODAL
+  -------------------------------------------------------- */
   const openDayModal = async (date) => {
     if (!authToken) return;
 
@@ -142,27 +157,31 @@ export default function CalendarPage() {
         setProductivity(3);
         setJournal("");
       }
-    } catch {
+    } catch (err) {
       setMood("");
       setProductivity(3);
       setJournal("");
     }
   };
 
-  // ---------------- SAVE SUMMARY ----------------
+  /* --------------------------------------------------------
+     SAVE SUMMARY
+  -------------------------------------------------------- */
   const saveSummary = async () => {
     if (!authToken || !selectedDate) return;
 
-    const future = isFutureDate(selectedDate);
     const dateKey = format(selectedDate, "yyyy-MM-dd");
+    const future = isFutureDate(selectedDate);
 
     const payload = {
       date: dateKey,
       journal: journal.trim() || null,
     };
 
-    if (!future && !currentSummary)
-      payload.mood = mood || null, payload.productivity = productivity;
+    if (!future && !currentSummary) {
+      payload.mood = mood || null;
+      payload.productivity = productivity;
+    }
 
     try {
       if (currentSummary) {
@@ -177,8 +196,7 @@ export default function CalendarPage() {
         });
       }
 
-      // refresh month
-      loadMonth(authToken);
+      await loadMonth();
 
       setOpenModal(false);
       setBanner("Saved!");
@@ -190,7 +208,9 @@ export default function CalendarPage() {
     }
   };
 
-  // ---------------- CALENDAR RENDER ----------------
+  /* --------------------------------------------------------
+     CALENDAR BUILD
+  -------------------------------------------------------- */
   const monthDays = eachDayOfInterval({
     start: startOfMonth(currentMonth),
     end: endOfMonth(currentMonth),
@@ -206,8 +226,12 @@ export default function CalendarPage() {
     bad: "bg-rose-500/10 border-rose-400/60",
   };
 
+  /* --------------------------------------------------------
+     RENDER
+  -------------------------------------------------------- */
   return (
     <div className="relative z-10 space-y-6 text-white">
+
       {/* HEADER */}
       <header>
         <p className="text-xs uppercase tracking-[0.18em] text-indigo-300/80">
@@ -218,12 +242,12 @@ export default function CalendarPage() {
 
       {/* BANNER */}
       {banner && (
-        <div className="px-3 py-2 text-sm rounded-lg bg-slate-800/80 border border-slate-600/60 inline-flex">
+        <div className="px-3 py-2 text-sm rounded-lg bg-slate-800/80 border border-slate-600 inline-flex">
           {banner}
         </div>
       )}
 
-      {/* MONTH NAVIGATION */}
+      {/* MONTH NAV */}
       <div className="flex items-center justify-between max-w-md mt-2">
         <button
           onClick={() =>
@@ -252,7 +276,7 @@ export default function CalendarPage() {
         </button>
       </div>
 
-      {/* WEEKDAY COLUMN HEADERS */}
+      {/* WEEKDAY HEADERS */}
       <div className="grid grid-cols-7 gap-2 mt-4 text-[11px] text-slate-400">
         {WEEKDAYS.map((d) => (
           <div key={d} className="text-center uppercase">
@@ -285,6 +309,7 @@ export default function CalendarPage() {
                 todayFlag ? "ring-2 ring-indigo-500/80" : ""
               }`}
             >
+              {/* DATE */}
               <p className="text-xs font-semibold flex justify-between">
                 <span>{format(day, "d")}</span>
 
@@ -295,17 +320,38 @@ export default function CalendarPage() {
                 )}
               </p>
 
-              {/* MOOD / PRODUCTIVITY */}
+              {/* SUMMARY (MOOD + PRODUCTIVITY + JOURNAL) */}
               {summary && (
-                <div className="mt-1 text-[10px] space-y-[1px]">
-                  {summary.mood && <p>{summary.mood}</p>}
+                <div className="mt-1 text-[10px] space-y-[2px]">
+
+                  {/* Mood Emoji */}
+                  {summary.mood && (
+                    <p className="flex items-center gap-1">
+                      <span className="text-[13px]">{moodEmoji(summary.mood)}</span>
+                      <span className="capitalize text-slate-300">
+                        {moodLabel(summary.mood)}
+                      </span>
+                    </p>
+                  )}
+
+                  {/* Productivity */}
                   {summary.productivity && (
-                    <p>Productivity {summary.productivity}/5</p>
+                    <p className="text-slate-400">
+                      Productivity {summary.productivity}/5
+                    </p>
+                  )}
+
+                  {/* Journal */}
+                  {summary.journal && (
+                    <p className="flex items-center gap-1 text-slate-200 truncate">
+                      <span>📝</span>
+                      <span className="truncate">{summary.journal}</span>
+                    </p>
                   )}
                 </div>
               )}
 
-              {/* TASKS LIST */}
+              {/* TASKS PREVIEW */}
               {tasks.length > 0 && (
                 <div className="mt-1.5 text-[10px] space-y-[2px]">
                   {tasks.slice(0, 2).map((t) => (
@@ -344,9 +390,12 @@ export default function CalendarPage() {
   );
 }
 
-/* ------------------------------------------
+/* --------------------------------------------------------
    MODAL COMPONENT
------------------------------------------- */
+-------------------------------------------------------- */
+/* --------------------------------------------------------
+   MODAL COMPONENT — UPDATED WITH DISABLED STYLING
+-------------------------------------------------------- */
 function DayModal({
   date,
   mood,
@@ -363,13 +412,24 @@ function DayModal({
 }) {
   const formatted = format(date, "d MMMM yyyy");
 
-  const canEditMood = !isFuture && !hasSummary;
-  const canEditProductivity = !isFuture && !hasSummary;
+  const moodLocked = isFuture || hasSummary;
+  const prodLocked = isFuture || hasSummary;
 
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">
-      <div className="bg-[#0e1525] border border-white/10 rounded-2xl p-6 w-[90%] max-w-md">
+      <div className="bg-[#0e1525] border border-white/10 rounded-2xl p-6 w-[90%] max-w-md shadow-xl">
+        
+        {/* HEADER */}
         <h2 className="text-xl font-semibold">{formatted}</h2>
+
+        {/* If locked, show an informational message */}
+        {(isFuture || hasSummary) && (
+          <p className="text-[11px] text-amber-300 mt-1 mb-2">
+            {isFuture
+              ? "Future dates cannot be marked."
+              : "You already logged this day — mood & productivity cannot be changed."}
+          </p>
+        )}
 
         {/* TASKS */}
         {tasks.length > 0 && (
@@ -396,34 +456,43 @@ function DayModal({
 
         {/* MOOD */}
         <p className="text-sm mb-1">Mood</p>
-        <div className="flex gap-2 mb-3">
+
+        <div className={`flex gap-2 mb-3 ${moodLocked ? "opacity-40" : ""}`}>
           {["good", "moderate", "bad"].map((m) => (
             <button
               key={m}
-              disabled={!canEditMood}
-              onClick={() => canEditMood && setMood(m)}
-              className={`px-3 py-1.5 rounded-lg border text-sm ${
-                mood === m
-                  ? "bg-indigo-500/30 border-indigo-400"
-                  : "bg-white/5 border-white/10"
-              }`}
+              disabled={moodLocked}
+              onClick={() => !moodLocked && setMood(m)}
+              className={`px-3 py-1.5 rounded-lg border text-sm
+                ${
+                  mood === m
+                    ? "bg-indigo-500/30 border-indigo-400"
+                    : "bg-white/5 border-white/10"
+                }
+                ${moodLocked ? "cursor-not-allowed" : ""}
+              `}
             >
-              {m}
+              {moodEmoji(m)} {m}
             </button>
           ))}
         </div>
 
         {/* PRODUCTIVITY */}
         <p className="text-sm mb-1">Productivity: {productivity}/5</p>
-        <input
-          type="range"
-          min="1"
-          max="5"
-          disabled={!canEditProductivity}
-          value={productivity}
-          onChange={(e) => setProductivity(Number(e.target.value))}
-          className="w-full mb-4"
-        />
+
+        <div className={prodLocked ? "opacity-40" : ""}>
+          <input
+            type="range"
+            min="1"
+            max="5"
+            value={productivity}
+            disabled={prodLocked}
+            onChange={(e) => setProductivity(Number(e.target.value))}
+            className={`w-full mb-4 ${
+              prodLocked ? "cursor-not-allowed" : ""
+            }`}
+          />
+        </div>
 
         {/* JOURNAL */}
         <p className="text-sm mb-1">Journal</p>
@@ -431,6 +500,7 @@ function DayModal({
           className="w-full h-28 p-3 bg-white/5 border border-white/10 rounded-lg"
           value={journal}
           onChange={(e) => setJournal(e.target.value)}
+          placeholder="Write something about your day..."
         />
 
         {/* BUTTONS */}
@@ -441,6 +511,7 @@ function DayModal({
           >
             Close
           </button>
+
           <button
             onClick={onSave}
             className="px-4 py-2 bg-indigo-600 rounded-lg font-semibold"
