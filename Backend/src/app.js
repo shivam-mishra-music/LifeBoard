@@ -6,6 +6,7 @@ import taskRoutes from "./routes/taskRoutes.js";
 import noteRoutes from "./routes/noteRoutes.js";
 import daySummaryRoutes from "./routes/daySummaryRoutes.js";
 import habitRoutes from "./routes/habitRoutes.js";
+import aiRoutes from "./routes/aiRoutes.js";
 
 dotenv.config();
 
@@ -19,7 +20,7 @@ app.use("/api/tasks", taskRoutes);
 app.use("/api/notes", noteRoutes);
 app.use("/api/day-summary", daySummaryRoutes);
 app.use("/api/habits", habitRoutes);
-
+app.use("/api/ai", aiRoutes); 
 
 
 app.get("/", (req, res) => {
