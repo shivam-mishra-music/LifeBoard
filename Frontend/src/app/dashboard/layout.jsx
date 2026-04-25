@@ -36,6 +36,7 @@ export default function DashboardLayout({ children }) {
     { id: "notes", label: "Notes", href: "/dashboard/notes" },
     { id: "calendar", label: "Calendar", href: "/dashboard/calendar" },
     { id: "habits", label: "Habits", href: "/dashboard/habits" },
+    { id: "chat", label: "Chat with AI", href: "/dashboard/chat" },
   ];
 
   const isActive = (href) => path === href;

@@ -7,6 +7,8 @@ import noteRoutes from "./routes/noteRoutes.js";
 import daySummaryRoutes from "./routes/daySummaryRoutes.js";
 import habitRoutes from "./routes/habitRoutes.js";
 import aiRoutes from "./routes/aiRoutes.js";
+import chatRoutes from "./routes/chatRoutes.js";
+import notificationRoutes from "./routes/notificationRoutes.js";
 
 dotenv.config();
 
@@ -15,6 +17,8 @@ const app = express();
 app.use(cors({ origin: true, credentials: true }));
 app.use(express.json()); 
 
+app.use("/api/chat", chatRoutes);
+app.use("/api/notifications", notificationRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/tasks", taskRoutes);
 app.use("/api/notes", noteRoutes);

@@ -25,13 +25,14 @@ model User {
   email     String   @unique
   password  String
   createdAt DateTime @default(now())
-
-  tasks        Task[]
-  notes        Note[]
-  daySummaries DaySummary[]
-
-  habits           Habit[]
-  habitCompletions HabitCompletion[]
+  tasks                Task[]
+  notes                Note[]
+  daySummaries         DaySummary[]
+  habits               Habit[]
+  habitCompletions     HabitCompletion[]
+  chatMessages         ChatMessage[]
+  notifications        Notification[]
+  emailPreference      EmailPreference?
 }
 
 model Task {
@@ -102,4 +103,36 @@ model HabitCompletion {
   userId Int
 
   @@unique([userId, habitId, date]) // one completion per habit per day
+}
+
+model ChatMessage {
+  id        Int      @id @default(autoincrement())
+  content   String
+  role      String   // "user" or "assistant"
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    Int
+}
+
+model Notification {
+  id        Int      @id @default(autoincrement())
+  title     String
+  message   String
+  type      String   // "task_overdue", "streak_warning", "daily_briefing", "custom"
+  read      Boolean  @default(false)
+  sentAt    DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    Int
+}
+
+model EmailPreference {
+  id              Int      @id @default(autoincrement())
+  dailyBriefing   Boolean  @default(true)
+  weeklyReport    Boolean  @default(false)
+  taskReminders   Boolean  @default(true)
+  streakAlerts    Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId          Int      @unique
 }
