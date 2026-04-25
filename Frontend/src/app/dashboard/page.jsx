@@ -5,6 +5,7 @@ import axios from "axios";
 import { format, isSameDay, startOfDay, subDays, differenceInDays } from "date-fns";
 import { useRouter } from "next/navigation";
 import AICoach from "@/components/AICoach";
+import NotificationsBell from "@/components/NotificationsBell";
 
 // ─── Micro sparkline chart (pure SVG, no deps) ───────────────────────────────
 function SparkBar({ data, color = "#6366f1", height = 48 }) {
@@ -241,19 +242,22 @@ export default function OverviewPage() {
       <header className="mb-8">
         <p className="text-[11px] uppercase tracking-[0.2em] text-indigo-400/70 font-medium mb-1">Overview</p>
         <div className="flex items-end justify-between gap-4">
-          <div>
-            <h1 className="text-[2rem] font-bold leading-tight tracking-tight">
-              {greetText}, <span className="text-indigo-300">{userName}</span> {greetIcon}
-            </h1>
-            <p className="text-sm text-slate-400 mt-0.5">{format(today, "EEEE, d MMMM yyyy")}</p>
-          </div>
-          <button
-            onClick={() => router.push("/dashboard/calendar")}
-            className="hidden sm:flex items-center gap-2 px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-sm text-slate-300 hover:text-white transition-all"
-          >
-            <span>📅</span> Log Today
-          </button>
-        </div>
+  <div>
+    <h1 className="text-[2rem] font-bold leading-tight tracking-tight">
+      {greetText}, <span className="text-indigo-300">{userName}</span> {greetIcon}
+    </h1>
+    <p className="text-sm text-slate-400 mt-0.5">{format(today, "EEEE, d MMMM yyyy")}</p>
+  </div>
+  <div className="flex items-center gap-3">
+    {token && <NotificationsBell token={token} />}
+    <button
+      onClick={() => router.push("/dashboard/calendar")}
+      className="hidden sm:flex items-center gap-2 px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-sm text-slate-300 hover:text-white transition-all"
+    >
+      <span>📅</span> Log Today
+    </button>
+  </div>
+</div>
       </header>
       {/* AI Coach */}
 {aiToken && (

@@ -10,14 +10,15 @@ export default function DashboardLayout({ children }) {
   const router = useRouter();
   const path = usePathname();
   const [loading, setLoading] = useState(true);
+  const [token, setToken] = useState(null);
 
-  // token check ho rha hai
   useEffect(() => {
-    const token = localStorage.getItem("lifeboard_token");
+    const t = localStorage.getItem("lifeboard_token");
 
-    if (!token) {
+    if (!t) {
       router.push("/login");
     } else {
+      setToken(t);
       setLoading(false);
     }
   }, [router]);
@@ -37,6 +38,7 @@ export default function DashboardLayout({ children }) {
     { id: "calendar", label: "Calendar", href: "/dashboard/calendar" },
     { id: "habits", label: "Habits", href: "/dashboard/habits" },
     { id: "chat", label: "Chat with AI", href: "/dashboard/chat" },
+    { id: "notifications", label: "Notifications", href: "/dashboard/notifications" },
   ];
 
   const isActive = (href) => path === href;
@@ -44,8 +46,8 @@ export default function DashboardLayout({ children }) {
   return (
     <div className="min-h-screen flex bg-gradient-to-br from-[#060b18] via-[#0b1126] to-[#111c3d] text-slate-100">
 
-      {/* LEFT SIDEBAR */}
-      <aside className="hidden sm:flex sm:flex-col w-64 border-r border-white/10 bg-white/5 backdrop-blur-xl px-6 py-5">
+      {/* LEFT SIDEBAR - FIXED (NO SCROLL) */}
+      <aside className="hidden sm:flex sm:flex-col fixed left-0 top-0 h-screen w-64 border-r border-white/10 bg-white/5 backdrop-blur-xl px-6 py-5 overflow-y-auto">
 
         {/* Logo */}
         <div className="flex items-center gap-3 mb-8">
@@ -77,23 +79,40 @@ export default function DashboardLayout({ children }) {
           ))}
         </nav>
 
-        {/* Logout */}
-        <div className="mt-6 pt-4 border-t border-white/5 text-xs text-slate-500">
-          <p className="mb-1">Signed in</p>
-          <button
-            className="text-[11px] text-slate-400 hover:text-indigo-300"
-            onClick={() => {
-              localStorage.removeItem("lifeboard_token");
-              router.push("/login");
-            }}
+        {/* Settings & Logout */}
+        <div className="mt-auto pt-4 border-t border-white/5 space-y-3">
+          {/* Settings */}
+          <Link
+            href="/dashboard/settings"
+            className={`block px-3 py-2 rounded-lg transition-all text-sm ${
+              isActive("/dashboard/settings")
+                ? "bg-indigo-600/80 text-white shadow-lg shadow-indigo-600/30"
+                : "text-slate-300 hover:bg-white/5 hover:text-white"
+            }`}
           >
-            Log Out
-          </button>
+            ⚙️ Settings
+          </Link>
+
+          {/* Logout */}
+          <div className="text-xs text-slate-500">
+            <p className="mb-2">Signed in</p>
+            <button
+              className="text-[11px] text-slate-400 hover:text-indigo-300 w-full text-left px-3 py-2 rounded-lg hover:bg-white/5 transition-all"
+              onClick={() => {
+                localStorage.removeItem("lifeboard_token");
+                localStorage.removeItem("lifeboard_user_name");
+                localStorage.removeItem("lifeboard_user_email");
+                router.push("/login");
+              }}
+            >
+              Log Out
+            </button>
+          </div>
         </div>
       </aside>
 
-      {/* MAIN CONTENT */}
-      <main className="flex-1 min-h-screen relative px-4 sm:px-8 py-6">
+      {/* MAIN CONTENT - OFFSET FOR FIXED SIDEBAR */}
+      <main className="flex-1 min-h-screen relative ml-0 sm:ml-64 px-4 sm:px-8 py-6">
         <div className="absolute -top-12 -left-10 h-52 w-52 bg-indigo-600/20 blur-3xl rounded-full animate-pulse" />
         <div className="absolute bottom-0 right-0 h-64 w-64 bg-blue-500/20 blur-[90px] rounded-full animate-pulse" />
 
