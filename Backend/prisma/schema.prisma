@@ -33,6 +33,7 @@ model User {
   chatMessages         ChatMessage[]
   notifications        Notification[]
   emailPreference      EmailPreference?
+  lastEmailSent    DateTime?
 }
 
 model Task {
