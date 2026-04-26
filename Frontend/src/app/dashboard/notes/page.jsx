@@ -368,7 +368,7 @@ export default function NotesPage() {
           <input
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            placeholder="Note title — e.g. 'Verse idea for Hum Tumhare'"
+            placeholder="Note title"
             className="w-full px-4 py-2.5 rounded-lg bg-white/5 border border-white/15 text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/70 transition text-sm"
           />
 

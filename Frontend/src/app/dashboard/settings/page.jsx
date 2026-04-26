@@ -7,23 +7,32 @@ import axios from "axios";
 export default function SettingsPage() {
   const API_URL = process.env.NEXT_PUBLIC_API_URL;
   const router = useRouter();
+  const [token, setToken] = useState(null);
   const [user, setUser] = useState({ name: "", email: "" });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [savingPrefs, setSavingPrefs] = useState(false);
   const [message, setMessage] = useState("");
+  const [emailPrefs, setEmailPrefs] = useState({
+    dailyBriefing: true,
+    weeklyReport: false,
+    taskReminders: true,
+    streakAlerts: true,
+  });
 
   useEffect(() => {
-    const token = localStorage.getItem("lifeboard_token");
-    if (!token) {
+    const t = localStorage.getItem("lifeboard_token");
+    if (!t) {
       router.push("/login");
       return;
     }
-    loadUserInfo(token);
+    setToken(t);
+    loadUserInfo(t);
+    loadEmailPreferences(t);
   }, []);
 
   const loadUserInfo = async (token) => {
     try {
-      // Get user info from localStorage or backend
       const name = localStorage.getItem("lifeboard_user_name") || "";
       const email = localStorage.getItem("lifeboard_user_email") || "";
       setUser({ name, email });
@@ -34,13 +43,30 @@ export default function SettingsPage() {
     }
   };
 
+  const loadEmailPreferences = async (token) => {
+    try {
+      const res = await axios.get(
+        `${API_URL}/api/notifications/preferences`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      if (res.data.preferences) {
+        setEmailPrefs({
+          dailyBriefing: res.data.preferences.dailyBriefing,
+          weeklyReport: res.data.preferences.weeklyReport,
+          taskReminders: res.data.preferences.taskReminders,
+          streakAlerts: res.data.preferences.streakAlerts,
+        });
+      }
+    } catch (error) {
+      console.error("Failed to load email preferences:", error);
+    }
+  };
+
   const handleSave = async () => {
-    const token = localStorage.getItem("lifeboard_token");
     setSaving(true);
     setMessage("");
 
     try {
-      // Save to localStorage (backend integration optional)
       localStorage.setItem("lifeboard_user_name", user.name);
       localStorage.setItem("lifeboard_user_email", user.email);
 
@@ -51,6 +77,30 @@ export default function SettingsPage() {
       setMessage("❌ Failed to save changes");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const toggleEmailPref = (key) => {
+    setEmailPrefs(prev => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  const saveEmailPrefs = async () => {
+    setSavingPrefs(true);
+    setMessage("");
+
+    try {
+      await axios.put(
+        `${API_URL}/api/notifications/preferences`,
+        emailPrefs,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      setMessage("✅ Email preferences updated!");
+      setTimeout(() => setMessage(""), 2000);
+    } catch (error) {
+      console.error("Failed to save preferences:", error);
+      setMessage("❌ Failed to save preferences");
+    } finally {
+      setSavingPrefs(false);
     }
   };
 
@@ -145,13 +195,117 @@ export default function SettingsPage() {
         </div>
       </div>
 
+      {/* Email Preferences Card */}
+      <div className="rounded-2xl border border-white/8 bg-[#0c1220] p-6 mb-6">
+        <h2 className="text-lg font-semibold text-white mb-6">Email Preferences</h2>
+
+        <div className="space-y-4">
+          {/* Daily Briefing Toggle */}
+          <div className="flex items-center justify-between p-4 rounded-xl bg-white/5 border border-white/8 hover:bg-white/7 transition-all">
+            <div>
+              <p className="font-medium text-white">Regular Briefing Emails</p>
+              <p className="text-xs text-slate-400 mt-1">Get motivational briefings every 4-5 days</p>
+            </div>
+            <button
+              onClick={() => toggleEmailPref('dailyBriefing')}
+              className={`relative w-12 h-7 rounded-full transition-all flex-shrink-0 ${
+                emailPrefs.dailyBriefing ? 'bg-indigo-600' : 'bg-white/10'
+              }`}
+            >
+              <div
+                className={`absolute top-1 w-5 h-5 rounded-full bg-white transition-all ${
+                  emailPrefs.dailyBriefing ? 'right-1' : 'left-1'
+                }`}
+              />
+            </button>
+          </div>
+
+          {/* Weekly Report Toggle */}
+          <div className="flex items-center justify-between p-4 rounded-xl bg-white/5 border border-white/8 hover:bg-white/7 transition-all">
+            <div>
+              <p className="font-medium text-white">Weekly Reports</p>
+              <p className="text-xs text-slate-400 mt-1">Get a summary every Sunday</p>
+            </div>
+            <button
+              onClick={() => toggleEmailPref('weeklyReport')}
+              className={`relative w-12 h-7 rounded-full transition-all flex-shrink-0 ${
+                emailPrefs.weeklyReport ? 'bg-indigo-600' : 'bg-white/10'
+              }`}
+            >
+              <div
+                className={`absolute top-1 w-5 h-5 rounded-full bg-white transition-all ${
+                  emailPrefs.weeklyReport ? 'right-1' : 'left-1'
+                }`}
+              />
+            </button>
+          </div>
+
+          {/* Task Reminders Toggle */}
+          <div className="flex items-center justify-between p-4 rounded-xl bg-white/5 border border-white/8 hover:bg-white/7 transition-all">
+            <div>
+              <p className="font-medium text-white">Task Reminders</p>
+              <p className="text-xs text-slate-400 mt-1">Get reminded about overdue tasks</p>
+            </div>
+            <button
+              onClick={() => toggleEmailPref('taskReminders')}
+              className={`relative w-12 h-7 rounded-full transition-all flex-shrink-0 ${
+                emailPrefs.taskReminders ? 'bg-indigo-600' : 'bg-white/10'
+              }`}
+            >
+              <div
+                className={`absolute top-1 w-5 h-5 rounded-full bg-white transition-all ${
+                  emailPrefs.taskReminders ? 'right-1' : 'left-1'
+                }`}
+              />
+            </button>
+          </div>
+
+          {/* Streak Alerts Toggle */}
+          <div className="flex items-center justify-between p-4 rounded-xl bg-white/5 border border-white/8 hover:bg-white/7 transition-all">
+            <div>
+              <p className="font-medium text-white">Streak Alerts</p>
+              <p className="text-xs text-slate-400 mt-1">Get notified when your streak is at risk</p>
+            </div>
+            <button
+              onClick={() => toggleEmailPref('streakAlerts')}
+              className={`relative w-12 h-7 rounded-full transition-all flex-shrink-0 ${
+                emailPrefs.streakAlerts ? 'bg-indigo-600' : 'bg-white/10'
+              }`}
+            >
+              <div
+                className={`absolute top-1 w-5 h-5 rounded-full bg-white transition-all ${
+                  emailPrefs.streakAlerts ? 'right-1' : 'left-1'
+                }`}
+              />
+            </button>
+          </div>
+
+          {/* Save Button */}
+          <button
+            onClick={saveEmailPrefs}
+            disabled={savingPrefs}
+            className="w-full py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-semibold transition-all mt-6 flex items-center justify-center gap-2 shadow-lg shadow-indigo-500/20"
+          >
+            {savingPrefs ? (
+              <>
+                <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                Saving…
+              </>
+            ) : (
+              <>💾 Save Email Preferences</>
+            )}
+          </button>
+        </div>
+      </div>
+
       {/* App Info */}
       <div className="rounded-2xl border border-white/8 bg-[#0c1220] p-6">
         <h2 className="text-lg font-semibold text-white mb-4">About LifeBoard</h2>
         <div className="space-y-3 text-sm text-slate-400">
           <p>✨ Version 2.0 with AI Coach</p>
-          <p>🚀 Features: Tasks, Notes, Habits, Calendar, Chat, Notifications</p>
+          <p>🚀 Features: Tasks, Notes, Habits, Calendar, Chat, Notifications, Email Briefings</p>
           <p>💾 Data is securely stored in our cloud</p>
+          <p>🔥 Motivational emails every 4-5 days to keep you on track</p>
         </div>
       </div>
     </div>

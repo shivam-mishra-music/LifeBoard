@@ -4,7 +4,6 @@ import { useEffect, useState, useRef } from "react";
 import axios from "axios";
 import { format, isSameDay, startOfDay, subDays, differenceInDays } from "date-fns";
 import { useRouter } from "next/navigation";
-import AICoach from "@/components/AICoach";
 import NotificationsBell from "@/components/NotificationsBell";
 
 // ─── Micro sparkline chart (pure SVG, no deps) ───────────────────────────────
@@ -106,31 +105,30 @@ export default function OverviewPage() {
   const [banner,   setBanner]   = useState("");
   const [mounted,  setMounted]  = useState(false);
   const [aiToken, setAiToken] = useState(null);
+  const [briefing, setBriefing] = useState(null);
 
   const today    = startOfDay(new Date());
   const todayStr = format(today, "yyyy-MM-dd");
 
   // ── auth ──────────────────────────────────────────────────────────────────
   useEffect(() => {
-  const t = localStorage.getItem("lifeboard_token");
-  if (!t) { router.push("/login"); return; }
-  setToken(t);
-  
-  const n = localStorage.getItem("lifeboard_user_name");
-  if (n) setUserName(n);
-  
-  // Get token for AI coach
-  setAiToken(t);  // ← Use the same 't' from above, no need to fetch again
-  
-  setTimeout(() => setMounted(true), 80);
-}, [router]);
+    const t = localStorage.getItem("lifeboard_token");
+    if (!t) { router.push("/login"); return; }
+    setToken(t);
+    
+    const n = localStorage.getItem("lifeboard_user_name");
+    if (n) setUserName(n);
+    
+    setAiToken(t);
+    setTimeout(() => setMounted(true), 80);
+  }, [router]);
 
   const flash = (msg) => { setBanner(msg); setTimeout(() => setBanner(""), 2500); };
 
   // ── load ──────────────────────────────────────────────────────────────────
   useEffect(() => {
     if (!token) return;
-    loadTasks(); loadHabits(); loadTodaySummary(); loadLast7(); 
+    loadTasks(); loadHabits(); loadTodaySummary(); loadLast7(); loadBriefing();
   }, [token]);
 
   const loadTasks = async () => {
@@ -176,6 +174,17 @@ export default function OverviewPage() {
       setLast7(res.data.days || []);
     } catch {}
   };
+
+  const loadBriefing = async () => {
+    try {
+      const res = await axios.post(`${API_URL}/api/ai/daily-briefing`, {}, { headers: { Authorization: `Bearer ${token}` } });
+      if (res.data.success) {
+        setBriefing(res.data.briefing);
+      }
+    } catch (error) {
+      console.error("Failed to load briefing:", error);
+    }
+  };
   
   // ── derived stats ─────────────────────────────────────────────────────────
   const todayDone    = todayTasks.filter(t => t.completed).length;
@@ -184,17 +193,14 @@ export default function OverviewPage() {
   const habitsDone   = habits.filter(h => h.todayDone).length;
   const habitsTotal  = habits.length;
 
-  // longest active streak across all habits
   const topStreak = habits.reduce((best, h) => Math.max(best, h.currentStreak || 0), 0);
 
-  // 7-day productivity data
   const prodData = Array.from({ length: 7 }, (_, i) => {
     const d = format(subDays(today, 6 - i), "yyyy-MM-dd");
     const found = last7.find(x => x.date?.startsWith(d));
     return found?.productivity ?? 0;
   });
 
-  // task completion ratio for week (derived from allTasks with dueDate in last 7 days)
   const weekTasks  = allTasks.filter(t => {
     if (!t.dueDate) return false;
     const diff = differenceInDays(today, startOfDay(new Date(t.dueDate)));
@@ -202,11 +208,9 @@ export default function OverviewPage() {
   });
   const weekDone   = weekTasks.filter(t => t.completed).length;
 
-  // avg productivity this week
   const prodValues = prodData.filter(v => v > 0);
   const avgProd    = prodValues.length ? (prodValues.reduce((a, b) => a + b, 0) / prodValues.length).toFixed(1) : "—";
 
-  // greeting
   const getGreeting = () => {
     const h = new Date().getHours();
     if (h < 5)  return { text: "Still up?",         icon: "🌙" };
@@ -217,7 +221,6 @@ export default function OverviewPage() {
   };
   const { text: greetText, icon: greetIcon } = getGreeting();
 
-  // score card (0–100 productivity score for today)
   const productivityScore = summary?.productivity ? Math.round((summary.productivity / 5) * 100) : null;
 
   // ── render ────────────────────────────────────────────────────────────────
@@ -242,27 +245,73 @@ export default function OverviewPage() {
       <header className="mb-8">
         <p className="text-[11px] uppercase tracking-[0.2em] text-indigo-400/70 font-medium mb-1">Overview</p>
         <div className="flex items-end justify-between gap-4">
-  <div>
-    <h1 className="text-[2rem] font-bold leading-tight tracking-tight">
-      {greetText}, <span className="text-indigo-300">{userName}</span> {greetIcon}
-    </h1>
-    <p className="text-sm text-slate-400 mt-0.5">{format(today, "EEEE, d MMMM yyyy")}</p>
-  </div>
-  <div className="flex items-center gap-3">
-    {token && <NotificationsBell token={token} />}
-    <button
-      onClick={() => router.push("/dashboard/calendar")}
-      className="hidden sm:flex items-center gap-2 px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-sm text-slate-300 hover:text-white transition-all"
-    >
-      <span>📅</span> Log Today
-    </button>
-  </div>
-</div>
+          <div>
+            <h1 className="text-[2rem] font-bold leading-tight tracking-tight">
+              {greetText}, <span className="text-indigo-300">{userName}</span> {greetIcon}
+            </h1>
+            <p className="text-sm text-slate-400 mt-0.5">{format(today, "EEEE, d MMMM yyyy")}</p>
+          </div>
+          <div className="flex items-center gap-3">
+            {token && <NotificationsBell token={token} />}
+            <button
+              onClick={() => router.push("/dashboard/calendar")}
+              className="hidden sm:flex items-center gap-2 px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-sm text-slate-300 hover:text-white transition-all"
+            >
+              <span>📅</span> Log Today
+            </button>
+          </div>
+        </div>
       </header>
-      {/* AI Coach */}
-{aiToken && (
-  <AICoach token={aiToken} userName={userName} />
-)}
+
+      {/* ── DAILY BRIEFING ── */}
+      {briefing ? (
+        <div
+          onClick={() => router.push("/dashboard/chat")}
+          className="mb-6 rounded-2xl p-6 border cursor-pointer transition-all hover:border-indigo-400/50 hover:shadow-lg hover:shadow-indigo-500/20"
+          style={{
+            background: `linear-gradient(135deg, rgba(99,102,241,0.1) 0%, rgba(15,23,42,0.5) 100%)`,
+            borderColor: "rgba(99,102,241,0.25)",
+          }}
+        >
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex-1">
+              <div className="flex items-center gap-2 mb-3">
+                <span className="text-2xl">✨</span>
+                <h2 className="text-lg font-semibold text-indigo-200">Daily Briefing</h2>
+              </div>
+              <p className="text-sm leading-relaxed text-slate-200">
+                {briefing}
+              </p>
+              <button className="mt-4 text-xs text-indigo-400 hover:text-indigo-300 font-medium">
+                💬 Open Chat →
+              </button>
+            </div>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                loadBriefing();
+              }}
+              className="px-3 py-1 rounded-lg bg-white/5 hover:bg-indigo-500/20 border border-white/8 text-xs text-slate-400 hover:text-indigo-300 transition-all flex-shrink-0"
+            >
+              ↻
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="mb-6 rounded-2xl border border-white/8 bg-[#0c1220] p-5 flex items-center justify-between">
+          <div>
+            <p className="text-sm text-slate-400">No daily briefing yet</p>
+            <p className="text-xs text-slate-500 mt-0.5">Log your mood and productivity to get AI insights</p>
+          </div>
+          <button
+            onClick={() => router.push("/dashboard/calendar")}
+            className="px-4 py-2 rounded-xl bg-indigo-600/30 hover:bg-indigo-600/50 border border-indigo-500/30 text-sm text-indigo-200 transition-all whitespace-nowrap"
+          >
+            + Log Day
+          </button>
+        </div>
+      )}
+
       {/* ── TODAY'S MOOD HERO CARD ── */}
       {summary ? (
         <div
@@ -272,7 +321,6 @@ export default function OverviewPage() {
             borderColor: mood(summary.mood).color + "33",
           }}
         >
-          {/* glow blob */}
           <div
             className="absolute -top-8 -right-8 w-40 h-40 rounded-full blur-3xl opacity-30"
             style={{ background: mood(summary.mood).color }}
@@ -339,7 +387,6 @@ export default function OverviewPage() {
             icon: "✅",
             color: "#818cf8",
             sub: todayTotal === 0 ? "None scheduled" : `${todayTotal - todayDone} remaining`,
-            sparkData: prodData, // reuse shape
           },
           {
             label: "Pending",
@@ -408,7 +455,6 @@ export default function OverviewPage() {
             </div>
           </div>
 
-          {/* Custom bar chart */}
           <div className="flex items-end gap-1.5 h-24">
             {Array.from({ length: 7 }, (_, i) => {
               const d    = subDays(today, 6 - i);
@@ -482,7 +528,6 @@ export default function OverviewPage() {
               );
             })}
           </div>
-          {/* Mood legend */}
           <div className="flex items-center gap-3 mt-4 pt-3 border-t border-white/5">
             {Object.entries(MOOD_MAP).map(([k, v]) => (
               <div key={k} className="flex items-center gap-1">
@@ -565,7 +610,7 @@ export default function OverviewPage() {
           </div>
         ) : (
           <div className="space-y-2">
-            {todayTasks.map((task, i) => {
+            {todayTasks.map((task) => {
               const p = PRIORITY[task.priority] || PRIORITY.MEDIUM;
               return (
                 <label
@@ -576,7 +621,6 @@ export default function OverviewPage() {
                     borderColor: task.completed ? "rgba(255,255,255,0.04)" : "rgba(255,255,255,0.08)",
                   }}
                 >
-                  {/* custom checkbox */}
                   <div
                     className="w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-all"
                     style={{
