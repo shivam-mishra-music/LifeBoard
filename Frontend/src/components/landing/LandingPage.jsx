@@ -236,6 +236,16 @@ const STEPS = [
   { n: "03", title: "Keep the streak alive", desc: "Come back tomorrow. The board remembers everything so you don't have to." },
 ];
 
+function FeatureCard({ f }) {
+  return (
+    <div className="card-glow shrink-0 w-[300px] sm:w-[320px] lg:w-[340px] rounded-2xl border border-white/10 bg-white/5 p-6">
+      <f.Icon />
+      <h3 className="font-display text-lg font-semibold text-white mb-1.5">{f.title}</h3>
+      <p className="text-sm text-slate-400 leading-relaxed">{f.desc}</p>
+    </div>
+  );
+}
+
 /* ------------------ fallback hero (used if AI frames fail to load) ------------------ */
 
 function HeroFallback() {
@@ -324,6 +334,19 @@ export default function LandingPage() {
           framePrefix="/hero-frames/frame_"
           scrollHeight="220vh"
           fallback={<HeroFallback />}
+          centerContent={
+            <div>
+              <span className="font-mono text-sm sm:text-base tracking-[0.3em] text-slate-300 uppercase block mb-3">
+                Increase your daily
+              </span>
+              <span
+                className="font-display block text-6xl sm:text-8xl lg:text-[8.5rem] font-extrabold leading-[0.95] tracking-tight bg-gradient-to-b from-white via-indigo-100 to-indigo-400 bg-clip-text text-transparent"
+                style={{ filter: "drop-shadow(0 0 50px rgba(99,102,241,0.35))" }}
+              >
+                PRODUCTIVITY
+              </span>
+            </div>
+          }
         >
           <div className="max-w-xl pl-5 sm:pl-8 lg:pl-16">
             <span className="font-mono text-xs tracking-[0.2em] text-indigo-400/80 uppercase">
@@ -356,8 +379,8 @@ export default function LandingPage() {
         </ScrollFramePlayer>
 
         {/* feature grid */}
-        <section className="px-5 sm:px-8 py-20 sm:py-24">
-          <div className="max-w-6xl mx-auto">
+        <section className="py-20 sm:py-24">
+          <div className="max-w-6xl mx-auto px-5 sm:px-8">
             <Reveal>
               <div className="max-w-xl mb-12">
                 <span className="font-mono text-xs tracking-[0.2em] text-indigo-400/80 uppercase">What&apos;s on the board</span>
@@ -366,18 +389,26 @@ export default function LandingPage() {
                 </h2>
               </div>
             </Reveal>
+          </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-              {FEATURES.map((f, i) => (
-                <Reveal key={f.title} delay={(i % 3) * 70}>
-                  <div className="card-glow h-full rounded-2xl border border-white/10 bg-white/5 p-6">
-                    <f.Icon />
-                    <h3 className="font-display text-lg font-semibold text-white mb-1.5">{f.title}</h3>
-                    <p className="text-sm text-slate-400 leading-relaxed">{f.desc}</p>
-                  </div>
-                </Reveal>
-              ))}
+          {/* Desktop: slow continuous marquee, pauses on hover so it stays readable */}
+          <Reveal className="hidden sm:block">
+            <div className="marquee-mask overflow-hidden">
+              <div className="marquee-track flex gap-5 w-max px-5 sm:px-8">
+                {[...FEATURES, ...FEATURES].map((f, i) => (
+                  <FeatureCard key={`${f.title}-${i}`} f={f} />
+                ))}
+              </div>
             </div>
+          </Reveal>
+
+          {/* Mobile: static stack, no auto-motion, fully readable on touch */}
+          <div className="sm:hidden px-5 grid grid-cols-1 gap-5 max-w-6xl mx-auto">
+            {FEATURES.map((f, i) => (
+              <Reveal key={f.title} delay={i * 60}>
+                <FeatureCard f={f} />
+              </Reveal>
+            ))}
           </div>
         </section>
 

@@ -10,6 +10,15 @@ function pad3(n) {
   return String(n).padStart(3, "0");
 }
 
+// Returns 0->1->0 across [inStart, inEnd] fade-in, hold, [outStart, outEnd] fade-out
+function fadeWindow(progress, inStart, inEnd, outStart, outEnd) {
+  if (progress <= inStart) return 0;
+  if (progress < inEnd) return (progress - inStart) / (inEnd - inStart);
+  if (progress <= outStart) return 1;
+  if (progress < outEnd) return 1 - (progress - outStart) / (outEnd - outStart);
+  return 0;
+}
+
 /**
  * Plays a sequence of frame images on a <canvas>, driven by scroll position
  * inside a tall "stage". The stage is pinned (position: sticky) for its
@@ -20,7 +29,12 @@ function pad3(n) {
  *  - framePrefix: path prefix, frames are "${framePrefix}${index}.webp"
  *  - scrollHeight: how tall the scroll stage is (controls how much scrolling
  *    it takes to play through all frames). Default "220vh".
- *  - children: overlay content (headline, CTAs) rendered on top of the canvas
+ *  - children: left-aligned overlay content (headline, CTAs), visible early,
+ *    fades out by ~28% scroll progress
+ *  - centerContent: center-screen overlay (e.g. big "PRODUCTIVITY" text),
+ *    fades in around 30%, holds through the animation's dramatic middle,
+ *    fades out again before the finale so nothing blocks the payoff shot
+ *  - showScrollHint: shows a bouncing scroll-down arrow for the first ~12%
  *  - fallback: rendered instead of the canvas if frames fail to load
  */
 export default function ScrollFramePlayer({
@@ -28,11 +42,15 @@ export default function ScrollFramePlayer({
   framePrefix,
   scrollHeight = "220vh",
   children,
+  centerContent,
+  showScrollHint = true,
   fallback,
 }) {
   const stageRef = useRef(null);
   const canvasRef = useRef(null);
   const overlayRef = useRef(null);
+  const centerRef = useRef(null);
+  const arrowRef = useRef(null);
   const imagesRef = useRef([]);
   const loadedCountRef = useRef(0);
   const currentDrawnRef = useRef(-1);
@@ -148,9 +166,19 @@ export default function ScrollFramePlayer({
       }
 
       if (overlayRef.current) {
-        const fade = Math.min(1, progress / 0.35);
+        const fade = Math.min(1, progress / 0.28);
         overlayRef.current.style.opacity = String(1 - fade);
         overlayRef.current.style.transform = `translateY(${-fade * 24}px)`;
+      }
+
+      if (centerRef.current) {
+        const v = fadeWindow(progress, 0.3, 0.46, 0.62, 0.8);
+        centerRef.current.style.opacity = String(v);
+        centerRef.current.style.transform = `translateY(${(1 - v) * 16}px) scale(${0.94 + v * 0.06})`;
+      }
+
+      if (arrowRef.current) {
+        arrowRef.current.style.opacity = String(Math.max(0, 1 - progress / 0.12));
       }
     };
 
@@ -209,6 +237,28 @@ export default function ScrollFramePlayer({
         >
           {children}
         </div>
+
+        {centerContent && (
+          <div
+            ref={centerRef}
+            className="absolute inset-0 z-10 flex items-center justify-center text-center px-6 pointer-events-none"
+            style={{ opacity: 0, willChange: "opacity, transform" }}
+          >
+            {centerContent}
+          </div>
+        )}
+
+        {showScrollHint && (
+          <div
+            ref={arrowRef}
+            className="absolute bottom-8 inset-x-0 z-10 flex flex-col items-center gap-2 pointer-events-none"
+          >
+            <span className="font-mono text-[11px] tracking-[0.2em] text-slate-400 uppercase">Scroll</span>
+            <svg className="scroll-arrow-bounce" width="20" height="20" viewBox="0 0 24 24" fill="none">
+              <path d="M6 9l6 6 6-6" stroke="#818cf8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </div>
+        )}
 
         {!ready && (
           <div className="absolute inset-0 flex items-center justify-center bg-[#030611]">
