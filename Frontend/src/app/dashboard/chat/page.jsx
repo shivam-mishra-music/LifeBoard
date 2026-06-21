@@ -12,7 +12,8 @@ export default function ChatPage() {
     const t = localStorage.getItem("lifeboard_token");
     if (!t) {
       router.push("/login");
-      return;
+      return
+      
     }
     setToken(t);
   }, [router]);
